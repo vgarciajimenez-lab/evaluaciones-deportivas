@@ -84,32 +84,42 @@
   .empty .big{font-size:2rem;margin-bottom:8px;}
   .section-title{display:flex;justify-content:space-between;align-items:center;margin:28px 0 12px;}
   .section-title h2{font-size:1.05rem;}
-  .category-block{margin-bottom:26px;}
-  .category-block h3{font-size:.95rem;color:var(--teal-dark);border-bottom:2px solid var(--line);padding-bottom:8px;margin-bottom:14px;}
-  .criterion{padding:14px 0;border-bottom:1px solid var(--line);}
-  .criterion:last-child{border-bottom:none;}
-  .criterion-head{display:flex;align-items:center;gap:6px;margin-bottom:10px;}
-  .criterion-head .cname{font-weight:600;font-size:.9rem;}
+  .category-block{margin-bottom:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card);}
+  .category-header{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 16px;cursor:pointer;background:var(--card);user-select:none;
+  }
+  .category-header:hover{background:#fafaf7;}
+  .category-header h3{font-size:.92rem;color:var(--teal-dark);margin:0;}
+  .category-header .count{font-size:.72rem;color:var(--muted);font-weight:500;margin-left:8px;}
+  .category-header .chev{color:var(--muted);transition:transform .15s;font-size:.75rem;}
+  .category-block.open .chev{transform:rotate(180deg);}
+  .category-body{display:none;padding:2px 16px 10px;}
+  .category-block.open .category-body{display:block;}
+  .criterion{padding:10px 0;border-top:1px solid var(--line);}
+  .criterion:first-child{border-top:none;}
+  .criterion-head{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .criterion-head .cname{font-weight:600;font-size:.85rem;}
   .info-btn{
-    width:18px;height:18px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);
-    background:none;font-size:.68rem;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;
+    width:16px;height:16px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);
+    background:none;font-size:.62rem;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;
     flex-shrink:0;
   }
   .info-box{
-    display:none;background:#eef2f1;border-radius:8px;padding:10px 12px;font-size:.8rem;color:var(--muted);
-    margin-bottom:10px;
+    display:none;background:#eef2f1;border-radius:8px;padding:8px 10px;font-size:.76rem;color:var(--muted);
+    margin-bottom:8px;
   }
   .info-box.show{display:block;}
-  .scale-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
-  .scale-opt{display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;}
+  .scale-row{display:flex;gap:8px;align-items:flex-start;}
+  .scale-opt{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;flex:1;min-width:0;}
   .scale-dot{
-    width:26px;height:26px;border-radius:50%;border:2px solid var(--line);background:#fff;transition:.12s;
+    width:20px;height:20px;border-radius:50%;border:2px solid var(--line);background:#fff;transition:.12s;
   }
   .scale-opt input{display:none;}
-  .scale-opt input:checked + .scale-dot{border-width:3px;transform:scale(1.05);}
-  .scale-label{font-size:.68rem;color:var(--muted);text-align:center;max-width:60px;}
-  .obs-field{margin-top:10px;}
-  .obs-field textarea{min-height:50px;font-size:.82rem;}
+  .scale-opt input:checked + .scale-dot{border-width:3px;transform:scale(1.1);}
+  .scale-label{font-size:.6rem;color:var(--muted);text-align:center;line-height:1.15;}
+  .obs-field{margin-top:8px;}
+  .obs-field textarea{min-height:36px;font-size:.78rem;padding:7px 9px;}
   .report-score{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);}
   .report-score:last-child{border-bottom:none;}
   .badge-dot{width:14px;height:14px;border-radius:50%;display:inline-block;margin-right:8px;}
@@ -402,14 +412,20 @@ const App = {
       <h2>${template.name}</h2>
       <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${this.currentSubject.full_name} · ${this.currentTeam.season}</p>`;
 
-    categories.forEach(cat=>{
-      html += `<div class="category-block"><h3>${cat.name}</h3>`;
+    categories.forEach((cat,idx)=>{
       const critsInCat = criteria.filter(c=>c.category_id===cat.id);
+      const openClass = idx===0 ? ' open' : '';
+      html += `<div class="category-block${openClass}" id="cat-${cat.id}">
+        <div class="category-header" onclick="App.toggleCategory('${cat.id}')">
+          <h3>${cat.name}<span class="count">${critsInCat.length} criterios</span></h3>
+          <span class="chev">▾</span>
+        </div>
+        <div class="category-body">`;
       critsInCat.forEach(crit=>{
         html += `<div class="criterion">
           <div class="criterion-head">
             <span class="cname">${crit.name}</span>
-            ${crit.help_text ? `<button class="info-btn" onclick="App.toggleInfo('info-${crit.id}')">i</button>` : ''}
+            ${crit.help_text ? `<button class="info-btn" onclick="event.stopPropagation(); App.toggleInfo('info-${crit.id}')">i</button>` : ''}
           </div>`;
         if(crit.help_text){
           html += `<div class="info-box" id="info-${crit.id}">${crit.help_text}</div>`;
@@ -426,7 +442,7 @@ const App = {
           <div class="obs-field"><textarea placeholder="Observación (opcional)" id="obs-${crit.id}"></textarea></div>
         </div>`;
       });
-      html += `</div>`;
+      html += `</div></div>`;
     });
 
     html += `<div class="row" style="margin-top:20px;">
@@ -443,6 +459,10 @@ const App = {
         inp.nextElementSibling.style.background = sl.color;
       }
     });
+  },
+
+  toggleCategory(id){
+    document.getElementById('cat-'+id).classList.toggle('open');
   },
 
   toggleInfo(id){
