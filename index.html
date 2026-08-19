@@ -417,28 +417,56 @@ const App = {
     if(e0) throw e0;
     const playerIds = (players||[]).map(p=>p.id);
 
-    let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(team)})'>← ${team.name}</div>
-      <h2>Estadísticas del equipo</h2>
-      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${team.name} · Temporada ${team.season} · ${playerIds.length} jugador(es)</p>`;
-
     if(playerIds.length===0){
-      html += `<div class="empty"><div class="big">📊</div>Este equipo todavía no tiene jugadores.</div>`;
-      document.getElementById('app').innerHTML = html;
+      document.getElementById('app').innerHTML = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(team)})'>← ${team.name}</div>
+        <h2>Estadísticas del equipo</h2>
+        <div class="empty"><div class="big">📊</div>Este equipo todavía no tiene jugadores.</div>`;
       return;
     }
 
     const { data: evals, error: e1 } = await client.from('evaluations')
-      .select('id, player_id, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
-      .in('player_id', playerIds);
+      .select('id, player_id, evaluation_date, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
+      .in('player_id', playerIds)
+      .order('evaluation_date', { ascending:false });
     if(e1) throw e1;
 
+    this._teamStatsEvals = evals || [];
+    this._teamStatsPlayerCount = playerIds.length;
+    this.teamStatsDateFilter = 'all';
+    this.renderTeamStatsBody();
+  },
+
+  onTeamStatsDateChange(value){
+    this.teamStatsDateFilter = value;
+    this.renderTeamStatsBody();
+  },
+
+  renderTeamStatsBody(){
+    const team = this.currentTeam;
+    const evals = this._teamStatsEvals || [];
+    const filter = this.teamStatsDateFilter || 'all';
+    const filteredEvals = filter==='all' ? evals : evals.filter(ev=>ev.evaluation_date===filter);
+
     const allScores = [];
-    (evals||[]).forEach(ev=>{
+    filteredEvals.forEach(ev=>{
       (ev.category_summary||[]).forEach(s=> allScores.push(s));
     });
 
+    const uniqueDates = [...new Set(evals.map(ev=>ev.evaluation_date))];
+
+    let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(team)})'>← ${team.name}</div>
+      <h2>Estadísticas del equipo</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 14px;">${team.name} · Temporada ${team.season} · ${this._teamStatsPlayerCount} jugador(es)</p>
+      <div style="margin-bottom:18px;max-width:280px;">
+        <label style="margin-top:0;">Ver datos de</label>
+        <select onchange="App.onTeamStatsDateChange(this.value)">
+          <option value="all" ${filter==='all'?'selected':''}>Todas las evaluaciones (acumulado)</option>
+          ${uniqueDates.map(d=>`<option value="${d}" ${filter===d?'selected':''}>Evaluaciones del ${d}</option>`).join('')}
+        </select>
+      </div>`;
+
     if(allScores.length===0){
-      html += `<div class="empty"><div class="big">📊</div>Todavía no hay evaluaciones registradas en este equipo.</div>`;
+      html += `<div class="empty"><div class="big">📊</div>No hay evaluaciones para esta selección.</div>`;
       document.getElementById('app').innerHTML = html;
       return;
     }
@@ -468,21 +496,47 @@ const App = {
     const col = subj.type==='player' ? 'player_id' : 'coach_id';
     const { data: evals, error: e1 } = await client.from('evaluations')
       .select('id, evaluation_date, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
-      .eq(col, subj.id);
+      .eq(col, subj.id)
+      .order('evaluation_date', { ascending:false });
     if(e1) throw e1;
 
-    // Flatten all scores across all evaluations of this subject
+    this._statsEvals = evals || [];
+    this.statsDateFilter = 'all';
+    this.renderStatsBody();
+  },
+
+  onStatsDateChange(value){
+    this.statsDateFilter = value;
+    this.renderStatsBody();
+  },
+
+  renderStatsBody(){
+    const subj = this.currentSubject;
+    const evals = this._statsEvals || [];
+    const filter = this.statsDateFilter || 'all';
+    const filteredEvals = filter==='all' ? evals : evals.filter(ev=>ev.evaluation_date===filter);
+
     const allScores = [];
-    (evals||[]).forEach(ev=>{
+    filteredEvals.forEach(ev=>{
       (ev.category_summary||[]).forEach(s=> allScores.push(s));
     });
 
+    // unique dates for the dropdown, most recent first
+    const uniqueDates = [...new Set(evals.map(ev=>ev.evaluation_date))];
+
     let html = `<div class="crumb" onclick='App.goSubject(${JSON.stringify(subj)})'>← ${subj.full_name}</div>
       <h2>Estadísticas</h2>
-      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${subj.full_name} · ${evals.length} evaluación(es) registradas</p>`;
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 14px;">${subj.full_name} · ${evals.length} evaluación(es) registradas</p>
+      <div style="margin-bottom:18px;max-width:280px;">
+        <label style="margin-top:0;">Ver datos de</label>
+        <select onchange="App.onStatsDateChange(this.value)">
+          <option value="all" ${filter==='all'?'selected':''}>Todas las evaluaciones (acumulado)</option>
+          ${uniqueDates.map(d=>`<option value="${d}" ${filter===d?'selected':''}>Evaluación del ${d}</option>`).join('')}
+        </select>
+      </div>`;
 
     if(allScores.length===0){
-      html += `<div class="empty"><div class="big">📊</div>Todavía no hay puntuaciones suficientes para generar el gráfico.</div>`;
+      html += `<div class="empty"><div class="big">📊</div>No hay puntuaciones para esta selección.</div>`;
       document.getElementById('app').innerHTML = html;
       return;
     }
