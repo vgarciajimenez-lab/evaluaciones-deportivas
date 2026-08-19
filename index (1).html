@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evaluación Deportiva</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --ink:#132a2e;
+    --teal:#0f4c5c;
+    --teal-dark:#0a3540;
+    --sand:#f6f3ec;
+    --card:#ffffff;
+    --line:#e4ded0;
+    --muted:#6b7a78;
+    --green:#22c55e;
+    --blue:#3b82f6;
+    --amber:#f59e0b;
+    --gray:#9ca3af;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Inter',system-ui,sans-serif;
+    background:var(--sand);
+    color:var(--ink);
+    min-height:100vh;
+  }
+  h1,h2,h3{font-family:'Sora',sans-serif;margin:0;}
+  #app{max-width:900px;margin:0 auto;padding:24px 20px 80px;}
+  .topbar{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:16px 20px;background:var(--teal-dark);color:#fff;
+  }
+  .topbar .brand{font-family:'Sora',sans-serif;font-weight:800;font-size:1.15rem;letter-spacing:.2px;}
+  .topbar .brand span{opacity:.65;font-weight:600;font-size:.85rem;display:block;margin-top:2px;}
+  .topbar button{background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;padding:8px 14px;border-radius:100px;font-size:.85rem;cursor:pointer;}
+  .topbar button:hover{background:rgba(255,255,255,.12);}
+  .nav{display:flex;gap:8px;margin-bottom:24px;}
+  .nav button{
+    flex:1;padding:12px;border-radius:10px;border:1px solid var(--line);
+    background:var(--card);font-weight:600;cursor:pointer;color:var(--muted);font-size:.9rem;
+  }
+  .nav button.active{background:var(--teal);color:#fff;border-color:var(--teal);}
+  .crumb{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem;margin-bottom:16px;cursor:pointer;}
+  .crumb:hover{color:var(--teal);}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:14px;}
+  .list-item{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 16px;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;margin-bottom:10px;cursor:pointer;transition:.15s;
+  }
+  .list-item:hover{border-color:var(--teal);transform:translateX(2px);}
+  .list-item .name{font-weight:600;}
+  .list-item .meta{color:var(--muted);font-size:.82rem;margin-top:2px;}
+  .list-item .arrow{color:var(--muted);}
+  .pill{display:inline-block;padding:3px 10px;border-radius:100px;font-size:.72rem;font-weight:600;background:#eef2f1;color:var(--teal-dark);}
+  .btn{
+    padding:11px 18px;border-radius:10px;border:none;font-weight:600;cursor:pointer;
+    font-size:.9rem;font-family:inherit;
+  }
+  .btn-primary{background:var(--teal);color:#fff;}
+  .btn-primary:hover{background:var(--teal-dark);}
+  .btn-outline{background:transparent;border:1px solid var(--line);color:var(--ink);}
+  .btn-outline:hover{border-color:var(--teal);color:var(--teal);}
+  .btn-block{width:100%;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;}
+  input,select,textarea{
+    width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;
+    font-family:inherit;font-size:.9rem;background:#fff;color:var(--ink);
+  }
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--teal);outline-offset:1px;}
+  label{display:block;font-size:.8rem;font-weight:600;color:var(--muted);margin-bottom:6px;margin-top:14px;}
+  label:first-child{margin-top:0;}
+  .login-wrap{max-width:380px;margin:80px auto;}
+  .login-wrap h1{text-align:center;margin-bottom:6px;}
+  .login-wrap p{text-align:center;color:var(--muted);margin-bottom:28px;font-size:.9rem;}
+  .error{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px 14px;border-radius:10px;font-size:.85rem;margin-top:14px;}
+  .empty{text-align:center;padding:50px 20px;color:var(--muted);}
+  .empty .big{font-size:2rem;margin-bottom:8px;}
+  .section-title{display:flex;justify-content:space-between;align-items:center;margin:28px 0 12px;}
+  .section-title h2{font-size:1.05rem;}
+  .category-block{margin-bottom:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card);}
+  .category-header{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 16px;cursor:pointer;background:var(--card);user-select:none;
+  }
+  .category-header:hover{background:#fafaf7;}
+  .category-header h3{font-size:.92rem;color:var(--teal-dark);margin:0;}
+  .category-header .count{font-size:.72rem;color:var(--muted);font-weight:500;margin-left:8px;}
+  .category-header .chev{color:var(--muted);transition:transform .15s;font-size:.75rem;}
+  .category-block.open .chev{transform:rotate(180deg);}
+  .category-body{display:none;padding:2px 16px 10px;}
+  .category-block.open .category-body{display:block;}
+  .criterion{padding:10px 0;border-top:1px solid var(--line);}
+  .criterion:first-child{border-top:none;}
+  .criterion-head{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .criterion-head .cname{font-weight:600;font-size:.85rem;}
+  .info-btn{
+    width:16px;height:16px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);
+    background:none;font-size:.62rem;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;
+  }
+  .info-box{
+    display:none;background:#eef2f1;border-radius:8px;padding:8px 10px;font-size:.76rem;color:var(--muted);
+    margin-bottom:8px;
+  }
+  .info-box.show{display:block;}
+  .scale-row{display:flex;gap:8px;align-items:flex-start;}
+  .scale-opt{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;flex:1;min-width:0;}
+  .scale-dot{
+    width:20px;height:20px;border-radius:50%;border:2px solid var(--line);background:#fff;transition:.12s;
+  }
+  .scale-opt input{display:none;}
+  .scale-opt input:checked + .scale-dot{border-width:3px;transform:scale(1.1);}
+  .scale-label{font-size:.6rem;color:var(--muted);text-align:center;line-height:1.15;}
+  .obs-field{margin-top:8px;}
+  .obs-field textarea{min-height:36px;font-size:.78rem;padding:7px 9px;}
+  .personal-block{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px;}
+  .personal-block h3{font-size:.92rem;color:var(--teal-dark);margin-bottom:14px;}
+  .personal-field{margin-bottom:14px;}
+  .personal-field:last-child{margin-bottom:0;}
+  .personal-field label{margin-top:0;}
+  .personal-field textarea{min-height:64px;font-size:.85rem;}
+  .report-score{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);}
+  .report-score:last-child{border-bottom:none;}
+  .badge-dot{width:14px;height:14px;border-radius:50%;display:inline-block;margin-right:8px;}
+  .status-tag{font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:100px;}
+  .status-final{background:#dcfce7;color:#166534;}
+  .status-draft{background:#fef3c7;color:#92400e;}
+  .toolbar{display:flex;justify-content:flex-end;gap:10px;margin-bottom:16px;}
+  @media print{
+    .topbar,.nav,.crumb,.toolbar,.no-print{display:none !important;}
+    body{background:#fff;}
+    #app{max-width:100%;padding:0;}
+  }
+</style>
+</head>
+<body>
+<div class="topbar no-print" id="topbar" style="display:none;">
+  <div class="brand">Evaluación Deportiva<span id="userEmail"></span></div>
+  <button onclick="App.logout()">Cerrar sesión</button>
+</div>
+<div id="app"></div>
+
+<script>
+const SUPABASE_URL = 'https://hdkhhuygjpsazorvtvnf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_EYmpp8rykCNn74nx8MGi3w_Slk-Z1So';
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const App = {
+  view: 'login',
+  user: null,
+  currentTeam: null,
+  currentSubject: null,      // { id, full_name, type: 'player'|'coach', team_id }
+  currentTemplate: null,
+  currentEvaluationId: null,
+  scaleSelections: {},       // criterionId -> scaleLevelId
+
+  async init(){
+    const { data:{ session } } = await client.auth.getSession();
+    if(session){
+      this.user = session.user;
+      document.getElementById('topbar').style.display='flex';
+      document.getElementById('userEmail').textContent = session.user.email;
+      this.view = 'teams';
+    }
+    this.render();
+  },
+
+  async logout(){
+    await client.auth.signOut();
+    this.user = null;
+    document.getElementById('topbar').style.display='none';
+    this.view = 'login';
+    this.render();
+  },
+
+  async login(email, password){
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true; btn.textContent = 'Entrando...';
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    btn.disabled = false; btn.textContent = 'Entrar';
+    if(error){
+      document.getElementById('loginError').textContent = 'Email o contraseña incorrectos.';
+      document.getElementById('loginError').style.display='block';
+      return;
+    }
+    this.user = data.user;
+    document.getElementById('topbar').style.display='flex';
+    document.getElementById('userEmail').textContent = data.user.email;
+    this.view = 'teams';
+    this.render();
+  },
+
+  goTeams(){ this.view='teams'; this.currentTeam=null; this.render(); },
+  goTeam(team){ this.currentTeam = team; this.view='team'; this.render(); },
+  goSubject(subject){ this.currentSubject = subject; this.view='subject'; this.render(); },
+
+  async render(){
+    const app = document.getElementById('app');
+    app.innerHTML = '<div class="empty">Cargando...</div>';
+    try{
+      if(this.view==='login') return this.renderLogin();
+      if(this.view==='teams') return this.renderTeams();
+      if(this.view==='team') return this.renderTeam();
+      if(this.view==='subject') return this.renderSubject();
+      if(this.view==='newEvaluation') return this.renderEvaluationForm();
+      if(this.view==='report') return this.renderReport();
+    }catch(err){
+      app.innerHTML = '<div class="card"><p>Ha ocurrido un error: '+err.message+'</p><button class="btn btn-outline" onclick="App.render()">Reintentar</button></div>';
+      console.error(err);
+    }
+  },
+
+  // ---------- LOGIN ----------
+  renderLogin(){
+    document.getElementById('app').innerHTML = `
+      <div class="login-wrap">
+        <h1>⚽ Evaluación Deportiva</h1>
+        <p>Inicia sesión para continuar</p>
+        <div class="card">
+          <label>Email</label>
+          <input type="email" id="loginEmail" placeholder="tu@email.com">
+          <label>Contraseña</label>
+          <input type="password" id="loginPassword" placeholder="••••••••">
+          <button id="loginBtn" class="btn btn-primary btn-block" style="margin-top:20px;" onclick="App.login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value)">Entrar</button>
+          <div class="error" id="loginError" style="display:none;"></div>
+        </div>
+      </div>`;
+    document.getElementById('loginPassword').addEventListener('keydown', e=>{
+      if(e.key==='Enter') App.login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value);
+    });
+  },
+
+  // ---------- TEAMS ----------
+  async renderTeams(){
+    const { data: teams, error } = await client.from('teams').select('*').order('name');
+    if(error) throw error;
+    let html = `<div class="section-title"><h2>Equipos</h2>
+      <button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button></div>`;
+    if(!teams || teams.length===0){
+      html += `<div class="empty"><div class="big">🏟️</div>Todavía no hay equipos.<br>Crea el primero para empezar.</div>`;
+    } else {
+      teams.forEach(t=>{
+        html += `<div class="list-item" onclick='App.goTeam(${JSON.stringify(t)})'>
+          <div><div class="name">${t.name}</div><div class="meta">Temporada ${t.season}</div></div>
+          <div class="arrow">→</div></div>`;
+      });
+    }
+    document.getElementById('app').innerHTML = html;
+  },
+
+  async editTeam(){
+    const team = this.currentTeam;
+    const name = prompt('Nombre del equipo:', team.name);
+    if(!name) return;
+    const season = prompt('Temporada (ej. 2026/27):', team.season);
+    if(!season) return;
+    const { error } = await client.from('teams').update({ name, season }).eq('id', team.id);
+    if(error) return alert('Error: '+error.message);
+    this.currentTeam = { ...team, name, season };
+    this.renderTeam();
+  },
+
+  async promptNewTeam(){
+    const name = prompt('Nombre del equipo:');
+    if(!name) return;
+    const season = prompt('Temporada (ej. 2025/26):', '2025/26');
+    if(!season) return;
+    const { error } = await client.from('teams').insert({ name, season });
+    if(error) return alert('Error: '+error.message);
+    this.renderTeams();
+  },
+
+  // ---------- TEAM DETAIL ----------
+  async renderTeam(){
+    const team = this.currentTeam;
+    const [{ data: players, error: e1 }, { data: coaches, error: e2 }] = await Promise.all([
+      client.from('players').select('*').eq('team_id', team.id).eq('active', true).order('full_name'),
+      client.from('coaches').select('*').eq('team_id', team.id).eq('active', true).order('full_name')
+    ]);
+    if(e1) throw e1; if(e2) throw e2;
+
+    let html = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div><h2>${team.name}</h2><p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">Temporada ${team.season}</p></div>
+        <button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>
+      </div>`;
+
+    html += `<div class="section-title"><h2>Jugadores</h2>
+      <button class="btn btn-outline" onclick="App.promptNewPerson('player')">+ Añadir jugador</button></div>`;
+    if(!players || players.length===0){
+      html += `<div class="empty">Sin jugadores todavía.</div>`;
+    } else {
+      players.forEach(p=>{
+        const subj = {...p, type:'player'};
+        html += `<div class="list-item">
+          <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;">
+            <div class="name">${p.full_name}</div><div class="meta">${p.position||'Sin posición'}</div></div>
+          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editPlayer(${JSON.stringify(p)})'>✏️</button>
+          <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
+      });
+    }
+
+    html += `<div class="section-title"><h2>Entrenadores</h2>
+      <button class="btn btn-outline" onclick="App.promptNewPerson('coach')">+ Añadir entrenador</button></div>`;
+    if(!coaches || coaches.length===0){
+      html += `<div class="empty">Sin entrenadores todavía.</div>`;
+    } else {
+      coaches.forEach(c=>{
+        const subj = {...c, type:'coach'};
+        html += `<div class="list-item">
+          <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;">
+            <div class="name">${c.full_name}</div></div>
+          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editCoach(${JSON.stringify(c)})'>✏️</button>
+          <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
+      });
+    }
+    document.getElementById('app').innerHTML = html;
+  },
+
+  async promptNewPerson(type){
+    const name = prompt(type==='player' ? 'Nombre del jugador:' : 'Nombre del entrenador:');
+    if(!name) return;
+    let payload = { full_name: name, team_id: this.currentTeam.id };
+    if(type==='player'){
+      const position = prompt('Posición (opcional):') || null;
+      payload.position = position;
+      const { error } = await client.from('players').insert(payload);
+      if(error) return alert('Error: '+error.message);
+    } else {
+      const { error } = await client.from('coaches').insert(payload);
+      if(error) return alert('Error: '+error.message);
+    }
+    this.renderTeam();
+  },
+
+  async editPlayer(player){
+    const name = prompt('Nombre del jugador:', player.full_name);
+    if(!name) return;
+    const position = prompt('Posición (opcional):', player.position || '');
+    const { error } = await client.from('players').update({ full_name: name, position: position || null }).eq('id', player.id);
+    if(error) return alert('Error: '+error.message);
+    this.renderTeam();
+  },
+
+  async editCoach(coach){
+    const name = prompt('Nombre del entrenador:', coach.full_name);
+    if(!name) return;
+    const { error } = await client.from('coaches').update({ full_name: name }).eq('id', coach.id);
+    if(error) return alert('Error: '+error.message);
+    this.renderTeam();
+  },
+
+  // ---------- SUBJECT DETAIL (player or coach) ----------
+  async renderSubject(){
+    const subj = this.currentSubject;
+    const col = subj.type==='player' ? 'player_id' : 'coach_id';
+    const { data: evals, error } = await client.from('evaluations')
+      .select('*').eq(col, subj.id).order('evaluation_date', { ascending:false });
+    if(error) throw error;
+
+    let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(this.currentTeam)})'>← ${this.currentTeam.name}</div>
+      <h2>${subj.full_name}</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${subj.type==='player' ? (subj.position||'Jugador') : 'Entrenador'}</p>
+      <div class="toolbar"><button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button></div>`;
+
+    if(!evals || evals.length===0){
+      html += `<div class="empty"><div class="big">📋</div>Todavía no hay evaluaciones.</div>`;
+    } else {
+      evals.forEach(ev=>{
+        const statusHtml = ev.status==='final'
+          ? '<span class="status-tag status-final">Cerrada</span>'
+          : '<span class="status-tag status-draft">Borrador</span>';
+        html += `<div class="list-item" onclick="App.openReport('${ev.id}')">
+          <div><div class="name">Evaluación ${ev.evaluation_date}</div><div class="meta">Temporada ${ev.season}</div></div>
+          <div>${statusHtml}</div></div>`;
+      });
+    }
+    document.getElementById('app').innerHTML = html;
+  },
+
+  // ---------- NEW EVALUATION ----------
+  async startNewEvaluation(){
+    const subjectType = this.currentSubject.type;
+    const { data: template, error } = await client.from('evaluation_templates')
+      .select('*').eq('subject_type', subjectType).limit(1).single();
+    if(error) return alert('No se encontró una plantilla de evaluación para este tipo. Revisa la tabla evaluation_templates en Supabase.');
+    this.currentTemplate = template;
+    this.scaleSelections = {};
+    this.view = 'newEvaluation';
+    this.render();
+  },
+
+  async renderEvaluationForm(){
+    const template = this.currentTemplate;
+    const { data: categories, error: e1 } = await client.from('categories')
+      .select('*').eq('template_id', template.id).order('sort_order');
+    if(e1) throw e1;
+    const categoryIds = categories.map(c=>c.id);
+    const { data: criteria, error: e2 } = await client.from('criteria')
+      .select('*').in('category_id', categoryIds.length?categoryIds:['00000000-0000-0000-0000-000000000000']).order('sort_order');
+    if(e2) throw e2;
+    const { data: scaleLevels, error: e3 } = await client.from('scale_levels')
+      .select('*').eq('template_id', template.id).order('sort_order');
+    if(e3) throw e3;
+
+    this._formCategories = categories;
+    this._formCriteria = criteria;
+    this._formScaleLevels = scaleLevels;
+
+    let html = `<div class="crumb" onclick='App.goSubject(${JSON.stringify(this.currentSubject)})'>← ${this.currentSubject.full_name}</div>
+      <h2>${template.name}</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${this.currentSubject.full_name} · ${this.currentTeam.season}</p>`;
+
+    categories.forEach((cat,idx)=>{
+      const critsInCat = criteria.filter(c=>c.category_id===cat.id);
+      const openClass = idx===0 ? ' open' : '';
+      html += `<div class="category-block${openClass}" id="cat-${cat.id}">
+        <div class="category-header" onclick="App.toggleCategory('${cat.id}')">
+          <h3>${cat.name}<span class="count">${critsInCat.length} criterios</span></h3>
+          <span class="chev">▾</span>
+        </div>
+        <div class="category-body">`;
+      critsInCat.forEach(crit=>{
+        html += `<div class="criterion">
+          <div class="criterion-head">
+            <span class="cname">${crit.name}</span>
+            ${crit.help_text ? `<button class="info-btn" onclick="event.stopPropagation(); App.toggleInfo('info-${crit.id}')">i</button>` : ''}
+          </div>`;
+        if(crit.help_text){
+          html += `<div class="info-box" id="info-${crit.id}">${crit.help_text}</div>`;
+        }
+        html += `<div class="scale-row">`;
+        scaleLevels.forEach(sl=>{
+          html += `<label class="scale-opt">
+            <input type="radio" name="scale-${crit.id}" value="${sl.id}" onchange="App.scaleSelections['${crit.id}']='${sl.id}'">
+            <span class="scale-dot" style="border-color:${sl.color};" onclick="this.previousElementSibling.checked=true; this.style.background='${sl.color}';"></span>
+            <span class="scale-label">${sl.label}</span>
+          </label>`;
+        });
+        html += `</div>
+          <div class="obs-field"><textarea placeholder="Observación (opcional)" id="obs-${crit.id}"></textarea></div>
+        </div>`;
+      });
+      html += `</div></div>`;
+    });
+
+    html += `<div class="personal-block">
+      <h3>Desarrollo personal</h3>
+      <div class="personal-field">
+        <label>Entrenabilidad</label>
+        <textarea id="pf-entrenabilidad" placeholder="Cómo responde a las correcciones y al aprendizaje..."></textarea>
+      </div>
+      <div class="personal-field">
+        <label>Fortalezas</label>
+        <textarea id="pf-fortalezas" placeholder="Puntos fuertes destacados..."></textarea>
+      </div>
+      <div class="personal-field">
+        <label>Objetivos de mejora</label>
+        <textarea id="pf-objetivos_mejora" placeholder="En qué debe centrarse de cara a la siguiente evaluación..."></textarea>
+      </div>
+      <div class="personal-field">
+        <label>Observaciones del entrenador</label>
+        <textarea id="pf-observaciones_entrenador" placeholder="Cualquier otro comentario relevante..."></textarea>
+      </div>
+    </div>`;
+
+    html += `<div class="row" style="margin-top:20px;">
+      <button class="btn btn-outline" onclick="App.saveEvaluation('draft')" style="flex:1;">Guardar borrador</button>
+      <button class="btn btn-primary" onclick="App.saveEvaluation('final')" style="flex:1;">Cerrar ficha</button>
+    </div>`;
+
+    document.getElementById('app').innerHTML = html;
+
+    // paint pre-selected dots correctly (in case of re-render)
+    document.querySelectorAll('.scale-opt input').forEach(inp=>{
+      if(inp.checked){
+        const sl = scaleLevels.find(s=>s.id===inp.value);
+        inp.nextElementSibling.style.background = sl.color;
+      }
+    });
+  },
+
+  toggleCategory(id){
+    document.getElementById('cat-'+id).classList.toggle('open');
+  },
+
+  toggleInfo(id){
+    document.getElementById(id).classList.toggle('show');
+  },
+
+  async saveEvaluation(status){
+    const subj = this.currentSubject;
+    const template = this.currentTemplate;
+    const payload = {
+      template_id: template.id,
+      subject_type: subj.type,
+      season: this.currentTeam.season,
+      status: status,
+      entrenabilidad: document.getElementById('pf-entrenabilidad').value || null,
+      fortalezas: document.getElementById('pf-fortalezas').value || null,
+      objetivos_mejora: document.getElementById('pf-objetivos_mejora').value || null,
+      observaciones_entrenador: document.getElementById('pf-observaciones_entrenador').value || null
+    };
+    payload[subj.type==='player' ? 'player_id' : 'coach_id'] = subj.id;
+
+    const { data: evalRow, error: e1 } = await client.from('evaluations').insert(payload).select().single();
+    if(e1) return alert('Error al guardar la evaluación: '+e1.message);
+
+    const scores = [];
+    this._formCriteria.forEach(crit=>{
+      const selectedInput = document.querySelector(`input[name="scale-${crit.id}"]:checked`);
+      const obs = document.getElementById(`obs-${crit.id}`).value || null;
+      if(selectedInput || obs){
+        scores.push({
+          evaluation_id: evalRow.id,
+          criterion_id: crit.id,
+          scale_level_id: selectedInput ? selectedInput.value : null,
+          observation: obs
+        });
+      }
+    });
+    if(scores.length){
+      const { error: e2 } = await client.from('evaluation_scores').insert(scores);
+      if(e2) return alert('La evaluación se creó pero hubo un error guardando las puntuaciones: '+e2.message);
+    }
+    this.currentEvaluationId = evalRow.id;
+    this.view = 'report';
+    this.render();
+  },
+
+  // ---------- REPORT ----------
+  async openReport(evaluationId){
+    this.currentEvaluationId = evaluationId;
+    this.view = 'report';
+    this.render();
+  },
+
+  async renderReport(){
+    const { data: ev, error: e1 } = await client.from('evaluations').select('*').eq('id', this.currentEvaluationId).single();
+    if(e1) throw e1;
+    const { data: scores, error: e2 } = await client.from('evaluation_scores')
+      .select('*, criteria(name, help_text, category_id, categories(name, sort_order)), scale_levels(label, color)')
+      .eq('evaluation_id', ev.id);
+    if(e2) throw e2;
+
+    // group by category
+    const byCategory = {};
+    scores.forEach(s=>{
+      const catName = s.criteria && s.criteria.categories ? s.criteria.categories.name : 'General';
+      if(!byCategory[catName]) byCategory[catName] = [];
+      byCategory[catName].push(s);
+    });
+
+    const statusHtml = ev.status==='final'
+      ? '<span class="status-tag status-final">Cerrada</span>'
+      : '<span class="status-tag status-draft">Borrador</span>';
+
+    let html = `<div class="crumb no-print" onclick='App.goSubject(${JSON.stringify(this.currentSubject)})'>← ${this.currentSubject.full_name}</div>
+      <div class="toolbar no-print"><button class="btn btn-outline" onclick="window.print()">Imprimir o guardar en PDF</button></div>
+      <h2>${this.currentSubject.full_name}</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 16px;">
+        Evaluación del ${ev.evaluation_date} · Temporada ${ev.season} &nbsp; ${statusHtml}
+      </p>`;
+
+    Object.keys(byCategory).forEach(catName=>{
+      html += `<div class="card"><h3 style="margin-bottom:10px;">${catName}</h3>`;
+      byCategory[catName].forEach(s=>{
+        const label = s.scale_levels ? s.scale_levels.label : 'No observado';
+        const color = s.scale_levels ? s.scale_levels.color : '#9ca3af';
+        html += `<div class="report-score">
+          <div><span class="badge-dot" style="background:${color};"></span>${s.criteria.name}</div>
+          <div style="font-weight:600;font-size:.85rem;">${label}</div>
+        </div>`;
+        if(s.observation){
+          html += `<div style="font-size:.8rem;color:var(--muted);margin:-4px 0 8px 22px;">${s.observation}</div>`;
+        }
+      });
+      html += `</div>`;
+    });
+
+    const personalFields = [
+      { key:'entrenabilidad', label:'Entrenabilidad' },
+      { key:'fortalezas', label:'Fortalezas' },
+      { key:'objetivos_mejora', label:'Objetivos de mejora' },
+      { key:'observaciones_entrenador', label:'Observaciones del entrenador' }
+    ].filter(f => ev[f.key]);
+
+    if(personalFields.length){
+      html += `<div class="card"><h3 style="margin-bottom:10px;">Desarrollo personal</h3>`;
+      personalFields.forEach(f=>{
+        html += `<div style="margin-bottom:12px;"><div style="font-weight:600;font-size:.82rem;color:var(--teal-dark);margin-bottom:2px;">${f.label}</div>
+          <div style="font-size:.85rem;color:var(--ink);">${ev[f.key]}</div></div>`;
+      });
+      html += `</div>`;
+    }
+
+    if(ev.general_notes){
+      html += `<div class="card"><h3>Notas generales</h3><p>${ev.general_notes}</p></div>`;
+    }
+
+    document.getElementById('app').innerHTML = html;
+  }
+};
+
+App.init();
+</script>
+</body>
+</html>
