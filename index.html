@@ -276,10 +276,10 @@ const App = {
         <button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>
       </div>`;
 
-    html += `<div class="section-title"><h2>Jugadoras</h2>
-      <button class="btn btn-outline" onclick="App.promptNewPerson('player')">+ Añadir jugadora</button></div>`;
+    html += `<div class="section-title"><h2>Jugadores</h2>
+      <button class="btn btn-outline" onclick="App.promptNewPerson('player')">+ Añadir jugador</button></div>`;
     if(!players || players.length===0){
-      html += `<div class="empty">Sin jugadoras todavía.</div>`;
+      html += `<div class="empty">Sin jugadores todavía.</div>`;
     } else {
       players.forEach(p=>{
         const subj = {...p, type:'player'};
@@ -309,7 +309,7 @@ const App = {
   },
 
   async promptNewPerson(type){
-    const name = prompt(type==='player' ? 'Nombre de la jugadora:' : 'Nombre del entrenador:');
+    const name = prompt(type==='player' ? 'Nombre del jugador:' : 'Nombre del entrenador:');
     if(!name) return;
     let payload = { full_name: name, team_id: this.currentTeam.id };
     if(type==='player'){
@@ -325,7 +325,7 @@ const App = {
   },
 
   async editPlayer(player){
-    const name = prompt('Nombre de la jugadora:', player.full_name);
+    const name = prompt('Nombre del jugador:', player.full_name);
     if(!name) return;
     const position = prompt('Posición (opcional):', player.position || '');
     const { error } = await client.from('players').update({ full_name: name, position: position || null }).eq('id', player.id);
@@ -351,7 +351,7 @@ const App = {
 
     let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(this.currentTeam)})'>← ${this.currentTeam.name}</div>
       <h2>${subj.full_name}</h2>
-      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${subj.type==='player' ? (subj.position||'Jugadora') : 'Entrenador'}</p>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${subj.type==='player' ? (subj.position||'Jugador') : 'Entrenador'}</p>
       <div class="toolbar"><button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button></div>`;
 
     if(!evals || evals.length===0){
