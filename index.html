@@ -120,6 +120,12 @@
   .scale-label{font-size:.6rem;color:var(--muted);text-align:center;line-height:1.15;}
   .obs-field{margin-top:8px;}
   .obs-field textarea{min-height:36px;font-size:.78rem;padding:7px 9px;}
+  .personal-block{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px;}
+  .personal-block h3{font-size:.92rem;color:var(--teal-dark);margin-bottom:14px;}
+  .personal-field{margin-bottom:14px;}
+  .personal-field:last-child{margin-bottom:0;}
+  .personal-field label{margin-top:0;}
+  .personal-field textarea{min-height:64px;font-size:.85rem;}
   .report-score{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);}
   .report-score:last-child{border-bottom:none;}
   .badge-dot{width:14px;height:14px;border-radius:50%;display:inline-block;margin-right:8px;}
@@ -445,6 +451,26 @@ const App = {
       html += `</div></div>`;
     });
 
+    html += `<div class="personal-block">
+      <h3>Desarrollo personal</h3>
+      <div class="personal-field">
+        <label>Entrenabilidad</label>
+        <textarea id="pf-entrenabilidad" placeholder="Cómo responde a las correcciones y al aprendizaje..."></textarea>
+      </div>
+      <div class="personal-field">
+        <label>Fortalezas</label>
+        <textarea id="pf-fortalezas" placeholder="Puntos fuertes destacados..."></textarea>
+      </div>
+      <div class="personal-field">
+        <label>Objetivos de mejora</label>
+        <textarea id="pf-objetivos_mejora" placeholder="En qué debe centrarse de cara a la siguiente evaluación..."></textarea>
+      </div>
+      <div class="personal-field">
+        <label>Observaciones del entrenador</label>
+        <textarea id="pf-observaciones_entrenador" placeholder="Cualquier otro comentario relevante..."></textarea>
+      </div>
+    </div>`;
+
     html += `<div class="row" style="margin-top:20px;">
       <button class="btn btn-outline" onclick="App.saveEvaluation('draft')" style="flex:1;">Guardar borrador</button>
       <button class="btn btn-primary" onclick="App.saveEvaluation('final')" style="flex:1;">Cerrar ficha</button>
@@ -476,7 +502,11 @@ const App = {
       template_id: template.id,
       subject_type: subj.type,
       season: this.currentTeam.season,
-      status: status
+      status: status,
+      entrenabilidad: document.getElementById('pf-entrenabilidad').value || null,
+      fortalezas: document.getElementById('pf-fortalezas').value || null,
+      objetivos_mejora: document.getElementById('pf-objetivos_mejora').value || null,
+      observaciones_entrenador: document.getElementById('pf-observaciones_entrenador').value || null
     };
     payload[subj.type==='player' ? 'player_id' : 'coach_id'] = subj.id;
 
@@ -554,6 +584,22 @@ const App = {
       });
       html += `</div>`;
     });
+
+    const personalFields = [
+      { key:'entrenabilidad', label:'Entrenabilidad' },
+      { key:'fortalezas', label:'Fortalezas' },
+      { key:'objetivos_mejora', label:'Objetivos de mejora' },
+      { key:'observaciones_entrenador', label:'Observaciones del entrenador' }
+    ].filter(f => ev[f.key]);
+
+    if(personalFields.length){
+      html += `<div class="card"><h3 style="margin-bottom:10px;">Desarrollo personal</h3>`;
+      personalFields.forEach(f=>{
+        html += `<div style="margin-bottom:12px;"><div style="font-weight:600;font-size:.82rem;color:var(--teal-dark);margin-bottom:2px;">${f.label}</div>
+          <div style="font-size:.85rem;color:var(--ink);">${ev[f.key]}</div></div>`;
+      });
+      html += `</div>`;
+    }
 
     if(ev.general_notes){
       html += `<div class="card"><h3>Notas generales</h3><p>${ev.general_notes}</p></div>`;
