@@ -139,6 +139,12 @@
   .status-final{background:#dcfce7;color:#166534;}
   .status-draft{background:#fef3c7;color:#92400e;}
   .toolbar{display:flex;justify-content:flex-end;gap:10px;margin-bottom:16px;}
+  .bar-chart{display:flex;flex-direction:column;gap:12px;}
+  .bar-row{display:flex;align-items:center;gap:10px;}
+  .bar-label{width:110px;flex-shrink:0;font-size:.8rem;color:var(--muted);font-weight:600;}
+  .bar-track{flex:1;background:#f0ede3;border-radius:6px;height:16px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:6px;transition:width .3s;min-width:3px;}
+  .bar-count{width:24px;text-align:right;font-size:.8rem;font-weight:700;color:var(--ink);flex-shrink:0;}
   @media print{
     .topbar,.nav,.crumb,.toolbar,.no-print{display:none !important;}
     body{background:#fff;}
@@ -205,7 +211,9 @@ const App = {
 
   goTeams(){ this.view='teams'; this.currentTeam=null; this.render(); },
   goTeam(team){ this.currentTeam = team; this.view='team'; this.render(); },
+  goTeamStats(){ this.view='teamStats'; this.render(); },
   goSubject(subject){ this.currentSubject = subject; this.view='subject'; this.render(); },
+  goStats(){ this.view='stats'; this.render(); },
 
   async render(){
     const app = document.getElementById('app');
@@ -214,7 +222,9 @@ const App = {
       if(this.view==='login') return this.renderLogin();
       if(this.view==='teams') return this.renderTeams();
       if(this.view==='team') return this.renderTeam();
+      if(this.view==='teamStats') return this.renderTeamStats();
       if(this.view==='subject') return this.renderSubject();
+      if(this.view==='stats') return this.renderStats();
       if(this.view==='newEvaluation') return this.renderEvaluationForm();
       if(this.view==='report') return this.renderReport();
     }catch(err){
@@ -295,7 +305,10 @@ const App = {
     let html = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div><h2>${team.name}</h2><p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">Temporada ${team.season}</p></div>
-        <button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>
+        <div class="row">
+          <button class="btn btn-outline" onclick="App.goTeamStats()">📊 Estadísticas del equipo</button>
+          <button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>
+        </div>
       </div>`;
 
     html += `<div class="section-title"><h2>Jugadores</h2>
@@ -374,7 +387,10 @@ const App = {
     let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(this.currentTeam)})'>← ${this.currentTeam.name}</div>
       <h2>${subj.full_name}</h2>
       <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${subj.type==='player' ? (subj.position||'Jugador') : 'Entrenador'}</p>
-      <div class="toolbar"><button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button></div>`;
+      <div class="toolbar">
+        ${evals && evals.length ? `<button class="btn btn-outline" onclick="App.goStats()">📊 Estadísticas</button>` : ''}
+        <button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button>
+      </div>`;
 
     if(!evals || evals.length===0){
       html += `<div class="empty"><div class="big">📋</div>Todavía no hay evaluaciones.</div>`;
@@ -392,6 +408,134 @@ const App = {
   },
 
   // ---------- NEW EVALUATION ----------
+  // ---------- TEAM STATS (aggregates all players in the team) ----------
+  async renderTeamStats(){
+    const team = this.currentTeam;
+    const { data: players, error: e0 } = await client.from('players')
+      .select('id').eq('team_id', team.id).eq('active', true);
+    if(e0) throw e0;
+    const playerIds = (players||[]).map(p=>p.id);
+
+    let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(team)})'>← ${team.name}</div>
+      <h2>Estadísticas del equipo</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${team.name} · Temporada ${team.season} · ${playerIds.length} jugador(es)</p>`;
+
+    if(playerIds.length===0){
+      html += `<div class="empty"><div class="big">📊</div>Este equipo todavía no tiene jugadores.</div>`;
+      document.getElementById('app').innerHTML = html;
+      return;
+    }
+
+    const { data: evals, error: e1 } = await client.from('evaluations')
+      .select('id, player_id, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
+      .in('player_id', playerIds);
+    if(e1) throw e1;
+
+    const allScores = [];
+    (evals||[]).forEach(ev=>{
+      (ev.category_summary||[]).forEach(s=> allScores.push(s));
+    });
+
+    if(allScores.length===0){
+      html += `<div class="empty"><div class="big">📊</div>Todavía no hay evaluaciones registradas en este equipo.</div>`;
+      document.getElementById('app').innerHTML = html;
+      return;
+    }
+
+    html += `<div class="card"><h3 style="margin-bottom:14px;">Resumen general del equipo</h3>`;
+    html += this.buildBarChart(allScores);
+    html += `</div>`;
+
+    const byCategory = {};
+    allScores.forEach(s=>{
+      const catName = s.criteria && s.criteria.categories ? s.criteria.categories.name : 'General';
+      if(!byCategory[catName]) byCategory[catName] = [];
+      byCategory[catName].push(s);
+    });
+    Object.keys(byCategory).forEach(catName=>{
+      html += `<div class="card"><h3 style="margin-bottom:14px;">${catName}</h3>`;
+      html += this.buildBarChart(byCategory[catName]);
+      html += `</div>`;
+    });
+
+    document.getElementById('app').innerHTML = html;
+  },
+
+  // ---------- STATS ----------
+  async renderStats(){
+    const subj = this.currentSubject;
+    const col = subj.type==='player' ? 'player_id' : 'coach_id';
+    const { data: evals, error: e1 } = await client.from('evaluations')
+      .select('id, evaluation_date, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
+      .eq(col, subj.id);
+    if(e1) throw e1;
+
+    // Flatten all scores across all evaluations of this subject
+    const allScores = [];
+    (evals||[]).forEach(ev=>{
+      (ev.category_summary||[]).forEach(s=> allScores.push(s));
+    });
+
+    let html = `<div class="crumb" onclick='App.goSubject(${JSON.stringify(subj)})'>← ${subj.full_name}</div>
+      <h2>Estadísticas</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${subj.full_name} · ${evals.length} evaluación(es) registradas</p>`;
+
+    if(allScores.length===0){
+      html += `<div class="empty"><div class="big">📊</div>Todavía no hay puntuaciones suficientes para generar el gráfico.</div>`;
+      document.getElementById('app').innerHTML = html;
+      return;
+    }
+
+    // ---- Overall distribution (all categories combined) ----
+    html += `<div class="card"><h3 style="margin-bottom:14px;">Resumen general</h3>`;
+    html += this.buildBarChart(allScores);
+    html += `</div>`;
+
+    // ---- Distribution per category ----
+    const byCategory = {};
+    allScores.forEach(s=>{
+      const catName = s.criteria && s.criteria.categories ? s.criteria.categories.name : 'General';
+      if(!byCategory[catName]) byCategory[catName] = [];
+      byCategory[catName].push(s);
+    });
+    Object.keys(byCategory).forEach(catName=>{
+      html += `<div class="card"><h3 style="margin-bottom:14px;">${catName}</h3>`;
+      html += this.buildBarChart(byCategory[catName]);
+      html += `</div>`;
+    });
+
+    document.getElementById('app').innerHTML = html;
+  },
+
+  // Builds a simple horizontal bar chart (pure CSS) counting how many
+  // scores fall into each scale level, ordered by the scale's sort_order.
+  buildBarChart(scores){
+    const counts = {}; // label -> {count, color, order}
+    scores.forEach(s=>{
+      const sl = s.scale_levels;
+      const label = sl ? sl.label : 'No observado';
+      const color = sl ? sl.color : '#9ca3af';
+      const order = sl ? sl.sort_order : 99;
+      if(!counts[label]) counts[label] = { count:0, color, order };
+      counts[label].count++;
+    });
+    const rows = Object.keys(counts).map(label=>({ label, ...counts[label] }))
+      .sort((a,b)=>a.order-b.order);
+    const max = Math.max(...rows.map(r=>r.count), 1);
+
+    let html = '<div class="bar-chart">';
+    rows.forEach(r=>{
+      const pct = Math.round((r.count/max)*100);
+      html += `<div class="bar-row">
+        <div class="bar-label">${r.label}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${r.color};"></div></div>
+        <div class="bar-count">${r.count}</div>
+      </div>`;
+    });
+    html += '</div>';
+    return html;
+  },
+
   async startNewEvaluation(){
     const subjectType = this.currentSubject.type;
     const { data: template, error } = await client.from('evaluation_templates')
