@@ -94,33 +94,38 @@
   .category-header .count{font-size:.72rem;color:var(--muted);font-weight:500;margin-left:8px;}
   .category-header .chev{color:var(--muted);transition:transform .15s;font-size:.75rem;}
   .category-block.open .chev{transform:rotate(180deg);}
-  .category-body{display:none;padding:2px 16px 10px;}
-  .category-block.open .category-body{display:block;}
-  .criterion{padding:10px 0;border-top:1px solid var(--line);}
-  .criterion:first-child{border-top:none;}
-  .criterion-head{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
-  .criterion-head .cname{font-weight:600;font-size:.85rem;}
+  .category-body{display:none;padding:10px 14px 14px;}
+  .category-block.open .category-body{
+    display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;
+  }
+  .criterion{
+    padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fbfaf7;
+  }
+  .criterion-head{display:flex;align-items:center;gap:5px;margin-bottom:6px;}
+  .criterion-head .cname{font-weight:600;font-size:.78rem;}
   .info-btn{
-    width:16px;height:16px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);
-    background:none;font-size:.62rem;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;
+    width:14px;height:14px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);
+    background:none;font-size:.56rem;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;
     flex-shrink:0;
   }
   .info-box{
-    display:none;background:#eef2f1;border-radius:8px;padding:8px 10px;font-size:.76rem;color:var(--muted);
-    margin-bottom:8px;
+    display:none;background:#eef2f1;border-radius:7px;padding:6px 8px;font-size:.7rem;color:var(--muted);
+    margin-bottom:6px;
   }
   .info-box.show{display:block;}
-  .scale-row{display:flex;gap:8px;align-items:flex-start;}
-  .scale-opt{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;flex:1;min-width:0;}
+  .scale-row{display:flex;gap:4px;align-items:flex-start;}
+  .scale-opt{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;flex:1;min-width:0;}
   .scale-dot{
-    width:20px;height:20px;border-radius:50%;border:2px solid var(--line);background:#fff;transition:.12s;
+    width:15px;height:15px;border-radius:50%;border:2px solid var(--line);background:#fff;transition:.12s;
   }
   .scale-opt input{display:none;}
-  /* CORRECCION: CSS para manejar la visualización cuando el radio está seleccionado */
-  .scale-opt input:checked + .scale-dot{border-width:6px; transform:scale(1.1);}
-  .scale-label{font-size:.6rem;color:var(--muted);text-align:center;line-height:1.15;}
-  .obs-field{margin-top:8px;}
-  .obs-field textarea{min-height:36px;font-size:.78rem;padding:7px 9px;}
+  .scale-opt input:checked + .scale-dot{border-width:3px;transform:scale(1.1);}
+  .scale-label{font-size:.52rem;color:var(--muted);text-align:center;line-height:1.1;}
+  .obs-field{margin-top:6px;}
+  .obs-field textarea{min-height:30px;font-size:.72rem;padding:6px 8px;}
+  @media (max-width:520px){
+    .category-block.open .category-body{grid-template-columns:1fr;}
+  }
   .personal-block{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px;}
   .personal-block h3{font-size:.92rem;color:var(--teal-dark);margin-bottom:14px;}
   .personal-field{margin-bottom:14px;}
@@ -157,10 +162,10 @@ const App = {
   view: 'login',
   user: null,
   currentTeam: null,
-  currentSubject: null,
+  currentSubject: null,      // { id, full_name, type: 'player'|'coach', team_id }
   currentTemplate: null,
   currentEvaluationId: null,
-  scaleSelections: {},
+  scaleSelections: {},       // criterionId -> scaleLevelId
 
   async init(){
     const { data:{ session } } = await client.auth.getSession();
@@ -218,6 +223,7 @@ const App = {
     }
   },
 
+  // ---------- LOGIN ----------
   renderLogin(){
     document.getElementById('app').innerHTML = `
       <div class="login-wrap">
@@ -237,6 +243,7 @@ const App = {
     });
   },
 
+  // ---------- TEAMS ----------
   async renderTeams(){
     const { data: teams, error } = await client.from('teams').select('*').order('name');
     if(error) throw error;
@@ -276,6 +283,7 @@ const App = {
     this.renderTeams();
   },
 
+  // ---------- TEAM DETAIL ----------
   async renderTeam(){
     const team = this.currentTeam;
     const [{ data: players, error: e1 }, { data: coaches, error: e2 }] = await Promise.all([
@@ -355,6 +363,7 @@ const App = {
     this.renderTeam();
   },
 
+  // ---------- SUBJECT DETAIL (player or coach) ----------
   async renderSubject(){
     const subj = this.currentSubject;
     const col = subj.type==='player' ? 'player_id' : 'coach_id';
@@ -382,11 +391,12 @@ const App = {
     document.getElementById('app').innerHTML = html;
   },
 
+  // ---------- NEW EVALUATION ----------
   async startNewEvaluation(){
     const subjectType = this.currentSubject.type;
     const { data: template, error } = await client.from('evaluation_templates')
       .select('*').eq('subject_type', subjectType).limit(1).single();
-    if(error) return alert('No se encontró una plantilla de evaluación para este tipo.');
+    if(error) return alert('No se encontró una plantilla de evaluación para este tipo. Revisa la tabla evaluation_templates en Supabase.');
     this.currentTemplate = template;
     this.scaleSelections = {};
     this.view = 'newEvaluation';
@@ -434,10 +444,9 @@ const App = {
         }
         html += `<div class="scale-row">`;
         scaleLevels.forEach(sl=>{
-          // CORRECCION: Eliminado onclick manual de estilo y dejado que CSS actúe
           html += `<label class="scale-opt">
             <input type="radio" name="scale-${crit.id}" value="${sl.id}" onchange="App.scaleSelections['${crit.id}']='${sl.id}'">
-            <span class="scale-dot" style="border-color:${sl.color};"></span>
+            <span class="scale-dot" style="border-color:${sl.color};" onclick="this.previousElementSibling.checked=true; this.style.background='${sl.color}';"></span>
             <span class="scale-label">${sl.label}</span>
           </label>`;
         });
@@ -452,7 +461,7 @@ const App = {
       <h3>Desarrollo personal</h3>
       <div class="personal-field">
         <label>Entrenabilidad</label>
-        <textarea id="pf-entrenabilidad" placeholder="Cómo responde a las correcciones..."></textarea>
+        <textarea id="pf-entrenabilidad" placeholder="Cómo responde a las correcciones y al aprendizaje..."></textarea>
       </div>
       <div class="personal-field">
         <label>Fortalezas</label>
@@ -460,11 +469,11 @@ const App = {
       </div>
       <div class="personal-field">
         <label>Objetivos de mejora</label>
-        <textarea id="pf-objetivos_mejora" placeholder="En qué debe centrarse..."></textarea>
+        <textarea id="pf-objetivos_mejora" placeholder="En qué debe centrarse de cara a la siguiente evaluación..."></textarea>
       </div>
       <div class="personal-field">
         <label>Observaciones del entrenador</label>
-        <textarea id="pf-observaciones_entrenador" placeholder="Otros comentarios..."></textarea>
+        <textarea id="pf-observaciones_entrenador" placeholder="Cualquier otro comentario relevante..."></textarea>
       </div>
     </div>`;
 
@@ -474,6 +483,14 @@ const App = {
     </div>`;
 
     document.getElementById('app').innerHTML = html;
+
+    // paint pre-selected dots correctly (in case of re-render)
+    document.querySelectorAll('.scale-opt input').forEach(inp=>{
+      if(inp.checked){
+        const sl = scaleLevels.find(s=>s.id===inp.value);
+        inp.nextElementSibling.style.background = sl.color;
+      }
+    });
   },
 
   toggleCategory(id){
@@ -524,6 +541,7 @@ const App = {
     this.render();
   },
 
+  // ---------- REPORT ----------
   async openReport(evaluationId){
     this.currentEvaluationId = evaluationId;
     this.view = 'report';
@@ -538,6 +556,7 @@ const App = {
       .eq('evaluation_id', ev.id);
     if(e2) throw e2;
 
+    // group by category
     const byCategory = {};
     scores.forEach(s=>{
       const catName = s.criteria && s.criteria.categories ? s.criteria.categories.name : 'General';
