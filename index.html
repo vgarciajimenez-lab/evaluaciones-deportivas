@@ -239,6 +239,18 @@ const App = {
     document.getElementById('app').innerHTML = html;
   },
 
+  async editTeam(){
+    const team = this.currentTeam;
+    const name = prompt('Nombre del equipo:', team.name);
+    if(!name) return;
+    const season = prompt('Temporada (ej. 2026/27):', team.season);
+    if(!season) return;
+    const { error } = await client.from('teams').update({ name, season }).eq('id', team.id);
+    if(error) return alert('Error: '+error.message);
+    this.currentTeam = { ...team, name, season };
+    this.renderTeam();
+  },
+
   async promptNewTeam(){
     const name = prompt('Nombre del equipo:');
     if(!name) return;
@@ -259,7 +271,10 @@ const App = {
     if(e1) throw e1; if(e2) throw e2;
 
     let html = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
-      <h2>${team.name}</h2><p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">Temporada ${team.season}</p>`;
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div><h2>${team.name}</h2><p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">Temporada ${team.season}</p></div>
+        <button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>
+      </div>`;
 
     html += `<div class="section-title"><h2>Jugadoras</h2>
       <button class="btn btn-outline" onclick="App.promptNewPerson('player')">+ Añadir jugadora</button></div>`;
@@ -268,9 +283,11 @@ const App = {
     } else {
       players.forEach(p=>{
         const subj = {...p, type:'player'};
-        html += `<div class="list-item" onclick='App.goSubject(${JSON.stringify(subj)})'>
-          <div><div class="name">${p.full_name}</div><div class="meta">${p.position||'Sin posición'}</div></div>
-          <div class="arrow">→</div></div>`;
+        html += `<div class="list-item">
+          <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;">
+            <div class="name">${p.full_name}</div><div class="meta">${p.position||'Sin posición'}</div></div>
+          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editPlayer(${JSON.stringify(p)})'>✏️</button>
+          <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
       });
     }
 
@@ -281,9 +298,11 @@ const App = {
     } else {
       coaches.forEach(c=>{
         const subj = {...c, type:'coach'};
-        html += `<div class="list-item" onclick='App.goSubject(${JSON.stringify(subj)})'>
-          <div><div class="name">${c.full_name}</div></div>
-          <div class="arrow">→</div></div>`;
+        html += `<div class="list-item">
+          <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;">
+            <div class="name">${c.full_name}</div></div>
+          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editCoach(${JSON.stringify(c)})'>✏️</button>
+          <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
       });
     }
     document.getElementById('app').innerHTML = html;
@@ -302,6 +321,23 @@ const App = {
       const { error } = await client.from('coaches').insert(payload);
       if(error) return alert('Error: '+error.message);
     }
+    this.renderTeam();
+  },
+
+  async editPlayer(player){
+    const name = prompt('Nombre de la jugadora:', player.full_name);
+    if(!name) return;
+    const position = prompt('Posición (opcional):', player.position || '');
+    const { error } = await client.from('players').update({ full_name: name, position: position || null }).eq('id', player.id);
+    if(error) return alert('Error: '+error.message);
+    this.renderTeam();
+  },
+
+  async editCoach(coach){
+    const name = prompt('Nombre del entrenador:', coach.full_name);
+    if(!name) return;
+    const { error } = await client.from('coaches').update({ full_name: name }).eq('id', coach.id);
+    if(error) return alert('Error: '+error.message);
     this.renderTeam();
   },
 
