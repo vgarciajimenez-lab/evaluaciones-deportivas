@@ -116,7 +116,8 @@
     width:20px;height:20px;border-radius:50%;border:2px solid var(--line);background:#fff;transition:.12s;
   }
   .scale-opt input{display:none;}
-  .scale-opt input:checked + .scale-dot{border-width:3px;transform:scale(1.1);}
+  /* CORRECCION: CSS para manejar la visualización cuando el radio está seleccionado */
+  .scale-opt input:checked + .scale-dot{border-width:6px; transform:scale(1.1);}
   .scale-label{font-size:.6rem;color:var(--muted);text-align:center;line-height:1.15;}
   .obs-field{margin-top:8px;}
   .obs-field textarea{min-height:36px;font-size:.78rem;padding:7px 9px;}
@@ -156,10 +157,10 @@ const App = {
   view: 'login',
   user: null,
   currentTeam: null,
-  currentSubject: null,      // { id, full_name, type: 'player'|'coach', team_id }
+  currentSubject: null,
   currentTemplate: null,
   currentEvaluationId: null,
-  scaleSelections: {},       // criterionId -> scaleLevelId
+  scaleSelections: {},
 
   async init(){
     const { data:{ session } } = await client.auth.getSession();
@@ -217,7 +218,6 @@ const App = {
     }
   },
 
-  // ---------- LOGIN ----------
   renderLogin(){
     document.getElementById('app').innerHTML = `
       <div class="login-wrap">
@@ -237,7 +237,6 @@ const App = {
     });
   },
 
-  // ---------- TEAMS ----------
   async renderTeams(){
     const { data: teams, error } = await client.from('teams').select('*').order('name');
     if(error) throw error;
@@ -277,7 +276,6 @@ const App = {
     this.renderTeams();
   },
 
-  // ---------- TEAM DETAIL ----------
   async renderTeam(){
     const team = this.currentTeam;
     const [{ data: players, error: e1 }, { data: coaches, error: e2 }] = await Promise.all([
@@ -357,7 +355,6 @@ const App = {
     this.renderTeam();
   },
 
-  // ---------- SUBJECT DETAIL (player or coach) ----------
   async renderSubject(){
     const subj = this.currentSubject;
     const col = subj.type==='player' ? 'player_id' : 'coach_id';
@@ -385,12 +382,11 @@ const App = {
     document.getElementById('app').innerHTML = html;
   },
 
-  // ---------- NEW EVALUATION ----------
   async startNewEvaluation(){
     const subjectType = this.currentSubject.type;
     const { data: template, error } = await client.from('evaluation_templates')
       .select('*').eq('subject_type', subjectType).limit(1).single();
-    if(error) return alert('No se encontró una plantilla de evaluación para este tipo. Revisa la tabla evaluation_templates en Supabase.');
+    if(error) return alert('No se encontró una plantilla de evaluación para este tipo.');
     this.currentTemplate = template;
     this.scaleSelections = {};
     this.view = 'newEvaluation';
@@ -438,9 +434,10 @@ const App = {
         }
         html += `<div class="scale-row">`;
         scaleLevels.forEach(sl=>{
+          // CORRECCION: Eliminado onclick manual de estilo y dejado que CSS actúe
           html += `<label class="scale-opt">
             <input type="radio" name="scale-${crit.id}" value="${sl.id}" onchange="App.scaleSelections['${crit.id}']='${sl.id}'">
-            <span class="scale-dot" style="border-color:${sl.color};" onclick="this.previousElementSibling.checked=true; this.style.background='${sl.color}';"></span>
+            <span class="scale-dot" style="border-color:${sl.color};"></span>
             <span class="scale-label">${sl.label}</span>
           </label>`;
         });
@@ -455,7 +452,7 @@ const App = {
       <h3>Desarrollo personal</h3>
       <div class="personal-field">
         <label>Entrenabilidad</label>
-        <textarea id="pf-entrenabilidad" placeholder="Cómo responde a las correcciones y al aprendizaje..."></textarea>
+        <textarea id="pf-entrenabilidad" placeholder="Cómo responde a las correcciones..."></textarea>
       </div>
       <div class="personal-field">
         <label>Fortalezas</label>
@@ -463,11 +460,11 @@ const App = {
       </div>
       <div class="personal-field">
         <label>Objetivos de mejora</label>
-        <textarea id="pf-objetivos_mejora" placeholder="En qué debe centrarse de cara a la siguiente evaluación..."></textarea>
+        <textarea id="pf-objetivos_mejora" placeholder="En qué debe centrarse..."></textarea>
       </div>
       <div class="personal-field">
         <label>Observaciones del entrenador</label>
-        <textarea id="pf-observaciones_entrenador" placeholder="Cualquier otro comentario relevante..."></textarea>
+        <textarea id="pf-observaciones_entrenador" placeholder="Otros comentarios..."></textarea>
       </div>
     </div>`;
 
@@ -477,14 +474,6 @@ const App = {
     </div>`;
 
     document.getElementById('app').innerHTML = html;
-
-    // paint pre-selected dots correctly (in case of re-render)
-    document.querySelectorAll('.scale-opt input').forEach(inp=>{
-      if(inp.checked){
-        const sl = scaleLevels.find(s=>s.id===inp.value);
-        inp.nextElementSibling.style.background = sl.color;
-      }
-    });
   },
 
   toggleCategory(id){
@@ -535,7 +524,6 @@ const App = {
     this.render();
   },
 
-  // ---------- REPORT ----------
   async openReport(evaluationId){
     this.currentEvaluationId = evaluationId;
     this.view = 'report';
@@ -550,7 +538,6 @@ const App = {
       .eq('evaluation_id', ev.id);
     if(e2) throw e2;
 
-    // group by category
     const byCategory = {};
     scores.forEach(s=>{
       const catName = s.criteria && s.criteria.categories ? s.criteria.categories.name : 'General';
