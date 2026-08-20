@@ -1141,12 +1141,23 @@ const App = {
       ? '<span class="status-tag status-final">Cerrada</span>'
       : '<span class="status-tag status-draft">Borrador</span>';
 
+    const subj = this.currentSubject;
+    const avatarHtml = subj.type==='player'
+      ? (subj.photo_url
+          ? `<img src="${subj.photo_url}" class="avatar avatar-lg">`
+          : `<div class="avatar avatar-lg">${this.initials(subj.full_name)}</div>`)
+      : '';
+
     let html = `<div class="crumb no-print" onclick='App.goSubject(${JSON.stringify(this.currentSubject)})'>← ${this.currentSubject.full_name}</div>
       <div class="toolbar no-print"><button class="btn btn-outline" onclick="window.print()">Imprimir o guardar en PDF</button></div>
-      <h2>${this.currentSubject.full_name}</h2>
-      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 16px;">
-        Evaluación del ${ev.evaluation_date} · Temporada ${ev.season} &nbsp; ${statusHtml}
-      </p>`;
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px;">
+        ${avatarHtml}
+        <div><h2>${this.currentSubject.full_name}</h2>
+        <p style="color:var(--muted);font-size:.85rem;margin:2px 0 0;">
+          Evaluación del ${ev.evaluation_date} · Temporada ${ev.season} &nbsp; ${statusHtml}
+        </p></div>
+      </div>
+      <div style="margin-bottom:16px;"></div>`;
 
     if(coachMode){
       const total = scores.reduce((sum,s)=> sum + (s.numeric_score!=null ? s.numeric_score : 0), 0);
