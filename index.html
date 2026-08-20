@@ -981,11 +981,11 @@ const App = {
           if(crit.help_text){
             html += `<div class="info-box" id="info-${crit.id}">${crit.help_text}</div>`;
           }
-          html += `<div class="scale-row">`;
+          html += `<div class="scale-row" id="scalerow-${crit.id}">`;
           scaleLevels.forEach(sl=>{
             html += `<label class="scale-opt">
-              <input type="radio" name="scale-${crit.id}" value="${sl.id}" onchange="App.scaleSelections['${crit.id}']='${sl.id}'">
-              <span class="scale-dot" style="border-color:${sl.color};" onclick="this.previousElementSibling.checked=true; this.style.background='${sl.color}';"></span>
+              <input type="radio" name="scale-${crit.id}" value="${sl.id}" style="display:none;">
+              <span class="scale-dot" style="border-color:${sl.color};" onclick="App.toggleScaleDot(this,'${crit.id}','${sl.id}','${sl.color}')"></span>
               <span class="scale-label">${sl.label}</span>
             </label>`;
           });
@@ -1039,6 +1039,24 @@ const App = {
       const el = document.getElementById('semaforo-opt-'+opt.value);
       if(el) el.classList.toggle('selected', opt.value===value);
     });
+  },
+
+  toggleScaleDot(dotEl, critId, slId, color){
+    const input = dotEl.previousElementSibling;
+    const row = document.getElementById('scalerow-'+critId);
+    const allDots = row.querySelectorAll('.scale-dot');
+
+    if(input.checked){
+      // already selected -> unmark
+      input.checked = false;
+      delete this.scaleSelections[critId];
+      allDots.forEach(d=> d.style.background = '');
+    } else {
+      input.checked = true;
+      this.scaleSelections[critId] = slId;
+      allDots.forEach(d=> d.style.background = '');
+      dotEl.style.background = color;
+    }
   },
 
   toggleCategory(id){
