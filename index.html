@@ -211,6 +211,7 @@ const App = {
   },
 
   goTeams(){ this.view='teams'; this.currentTeam=null; this.render(); },
+  goClubStats(){ this.view='clubStats'; this.render(); },
   goTeam(team){ this.currentTeam = team; this.view='team'; this.render(); },
   goTeamStats(){ this.view='teamStats'; this.render(); },
   goSubject(subject){ this.currentSubject = subject; this.view='subject'; this.render(); },
@@ -222,6 +223,7 @@ const App = {
     try{
       if(this.view==='login') return this.renderLogin();
       if(this.view==='teams') return this.renderTeams();
+      if(this.view==='clubStats') return this.renderClubStats();
       if(this.view==='team') return this.renderTeam();
       if(this.view==='teamStats') return this.renderTeamStats();
       if(this.view==='subject') return this.renderSubject();
@@ -259,7 +261,10 @@ const App = {
     const { data: teams, error } = await client.from('teams').select('*').order('name');
     if(error) throw error;
     let html = `<div class="section-title"><h2>Equipos</h2>
-      <button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button></div>`;
+      <div class="row">
+        ${teams && teams.length>1 ? `<button class="btn btn-outline" onclick="App.goClubStats()">📊 Estadísticas del club</button>` : ''}
+        <button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button>
+      </div></div>`;
     if(!teams || teams.length===0){
       html += `<div class="empty"><div class="big">🏟️</div>Todavía no hay equipos.<br>Crea el primero para empezar.</div>`;
     } else {
@@ -282,6 +287,24 @@ const App = {
     if(error) return alert('Error: '+error.message);
     this.currentTeam = { ...team, name, season };
     this.renderTeam();
+  },
+
+  async deleteTeam(){
+    const team = this.currentTeam;
+    const typed = prompt(
+      `Esta acción eliminará el equipo "${team.name}" y TODOS sus jugadores, entrenadores y evaluaciones. No se puede deshacer.\n\nEscribe el nombre exacto del equipo para confirmar:`
+    );
+    if(typed !== team.name){
+      if(typed !== null) alert('El nombre no coincide. No se ha eliminado nada.');
+      return;
+    }
+    const { error: e1 } = await client.from('players').delete().eq('team_id', team.id);
+    if(e1) return alert('Error al eliminar jugadores: '+e1.message);
+    const { error: e2 } = await client.from('coaches').delete().eq('team_id', team.id);
+    if(e2) return alert('Error al eliminar entrenadores: '+e2.message);
+    const { error: e3 } = await client.from('teams').delete().eq('id', team.id);
+    if(e3) return alert('Error al eliminar el equipo: '+e3.message);
+    this.goTeams();
   },
 
   async promptNewTeam(){
@@ -309,6 +332,7 @@ const App = {
         <div class="row">
           <button class="btn btn-outline" onclick="App.goTeamStats()">📊 Estadísticas del equipo</button>
           <button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>
+          <button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="App.deleteTeam()">🗑️ Eliminar equipo</button>
         </div>
       </div>`;
 
@@ -409,6 +433,113 @@ const App = {
   },
 
   // ---------- NEW EVALUATION ----------
+  // ---------- CLUB STATS (aggregates all teams / all players) ----------
+  async renderClubStats(){
+    const { data: teams, error: e0 } = await client.from('teams').select('*').order('name');
+    if(e0) throw e0;
+
+    const { data: players, error: e1 } = await client.from('players')
+      .select('id, team_id').eq('active', true);
+    if(e1) throw e1;
+
+    if(!players || players.length===0){
+      document.getElementById('app').innerHTML = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
+        <h2>Estadísticas del club</h2>
+        <div class="empty"><div class="big">📊</div>Todavía no hay jugadores registrados en el club.</div>`;
+      return;
+    }
+
+    const playerIds = players.map(p=>p.id);
+    const { data: evals, error: e2 } = await client.from('evaluations')
+      .select('id, player_id, season, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
+      .in('player_id', playerIds);
+    if(e2) throw e2;
+
+    this._clubStatsTeams = teams || [];
+    this._clubStatsPlayers = players;
+    this._clubStatsEvals = evals || [];
+    this.clubStatsSeasonFilter = 'all';
+    this.renderClubStatsBody();
+  },
+
+  onClubStatsSeasonChange(value){
+    this.clubStatsSeasonFilter = value;
+    this.renderClubStatsBody();
+  },
+
+  renderClubStatsBody(){
+    const teams = this._clubStatsTeams || [];
+    const players = this._clubStatsPlayers || [];
+    const evals = this._clubStatsEvals || [];
+    const seasonFilter = this.clubStatsSeasonFilter || 'all';
+    const filteredEvals = seasonFilter==='all' ? evals : evals.filter(ev=>ev.season===seasonFilter);
+    const uniqueSeasons = [...new Set(evals.map(ev=>ev.season))];
+
+    let html = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
+      <h2>Estadísticas del club</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 14px;">${teams.length} equipo(s) · ${players.length} jugador(es) en total</p>
+      <div style="margin-bottom:18px;max-width:220px;">
+        <label style="margin-top:0;">Temporada</label>
+        <select onchange="App.onClubStatsSeasonChange(this.value)">
+          <option value="all" ${seasonFilter==='all'?'selected':''}>Todas las temporadas</option>
+          ${uniqueSeasons.map(s=>`<option value="${s}" ${seasonFilter===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </div>`;
+
+    const allScores = [];
+    filteredEvals.forEach(ev=>{
+      (ev.category_summary||[]).forEach(s=> allScores.push(s));
+    });
+
+    if(allScores.length===0){
+      html += `<div class="empty"><div class="big">📊</div>No hay evaluaciones para esta selección.</div>`;
+      document.getElementById('app').innerHTML = html;
+      return;
+    }
+
+    // ---- Overall club summary ----
+    html += `<div class="card"><h3 style="margin-bottom:14px;">Resumen general del club</h3>`;
+    html += this.buildBarChart(allScores);
+    html += `</div>`;
+
+    // ---- Comparison between teams ----
+    const playerToTeam = {};
+    players.forEach(p=> playerToTeam[p.id] = p.team_id);
+    const evalsByTeam = {};
+    filteredEvals.forEach(ev=>{
+      const teamId = playerToTeam[ev.player_id];
+      if(!teamId) return;
+      if(!evalsByTeam[teamId]) evalsByTeam[teamId] = [];
+      (ev.category_summary||[]).forEach(s=> evalsByTeam[teamId].push(s));
+    });
+
+    const teamsWithData = teams.filter(t=> evalsByTeam[t.id] && evalsByTeam[t.id].length);
+    if(teamsWithData.length > 1){
+      html += `<div class="section-title"><h2 style="font-size:1rem;">Comparativa por equipo</h2></div>`;
+      teamsWithData.forEach(t=>{
+        html += `<div class="card"><h3 style="margin-bottom:14px;">${t.name} <span style="font-weight:500;color:var(--muted);font-size:.78rem;">· ${t.season}</span></h3>`;
+        html += this.buildBarChart(evalsByTeam[t.id]);
+        html += `</div>`;
+      });
+    }
+
+    // ---- Distribution per category (whole club) ----
+    const byCategory = {};
+    allScores.forEach(s=>{
+      const catName = s.criteria && s.criteria.categories ? s.criteria.categories.name : 'General';
+      if(!byCategory[catName]) byCategory[catName] = [];
+      byCategory[catName].push(s);
+    });
+    html += `<div class="section-title"><h2 style="font-size:1rem;">Por categoría (todo el club)</h2></div>`;
+    Object.keys(byCategory).forEach(catName=>{
+      html += `<div class="card"><h3 style="margin-bottom:14px;">${catName}</h3>`;
+      html += this.buildBarChart(byCategory[catName]);
+      html += `</div>`;
+    });
+
+    document.getElementById('app').innerHTML = html;
+  },
+
   // ---------- TEAM STATS (aggregates all players in the team) ----------
   async renderTeamStats(){
     const team = this.currentTeam;
@@ -425,7 +556,7 @@ const App = {
     }
 
     const { data: evals, error: e1 } = await client.from('evaluations')
-      .select('id, player_id, evaluation_date, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
+      .select('id, player_id, evaluation_date, season, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
       .in('player_id', playerIds)
       .order('evaluation_date', { ascending:false });
     if(e1) throw e1;
@@ -433,6 +564,7 @@ const App = {
     this._teamStatsEvals = evals || [];
     this._teamStatsPlayerCount = playerIds.length;
     this.teamStatsDateFilter = 'all';
+    this.teamStatsSeasonFilter = 'all';
     this.renderTeamStatsBody();
   },
 
@@ -441,11 +573,19 @@ const App = {
     this.renderTeamStatsBody();
   },
 
+  onTeamStatsSeasonChange(value){
+    this.teamStatsSeasonFilter = value;
+    this.renderTeamStatsBody();
+  },
+
   renderTeamStatsBody(){
     const team = this.currentTeam;
     const evals = this._teamStatsEvals || [];
-    const filter = this.teamStatsDateFilter || 'all';
-    const filteredEvals = filter==='all' ? evals : evals.filter(ev=>ev.evaluation_date===filter);
+    const dateFilter = this.teamStatsDateFilter || 'all';
+    const seasonFilter = this.teamStatsSeasonFilter || 'all';
+    const filteredEvals = evals
+      .filter(ev=> dateFilter==='all' || ev.evaluation_date===dateFilter)
+      .filter(ev=> seasonFilter==='all' || ev.season===seasonFilter);
 
     const allScores = [];
     filteredEvals.forEach(ev=>{
@@ -453,16 +593,26 @@ const App = {
     });
 
     const uniqueDates = [...new Set(evals.map(ev=>ev.evaluation_date))];
+    const uniqueSeasons = [...new Set(evals.map(ev=>ev.season))];
 
     let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(team)})'>← ${team.name}</div>
       <h2>Estadísticas del equipo</h2>
-      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 14px;">${team.name} · Temporada ${team.season} · ${this._teamStatsPlayerCount} jugador(es)</p>
-      <div style="margin-bottom:18px;max-width:280px;">
-        <label style="margin-top:0;">Ver datos de</label>
-        <select onchange="App.onTeamStatsDateChange(this.value)">
-          <option value="all" ${filter==='all'?'selected':''}>Todas las evaluaciones (acumulado)</option>
-          ${uniqueDates.map(d=>`<option value="${d}" ${filter===d?'selected':''}>Evaluaciones del ${d}</option>`).join('')}
-        </select>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 14px;">${team.name} · ${this._teamStatsPlayerCount} jugador(es)</p>
+      <div class="row" style="margin-bottom:18px;">
+        <div style="max-width:220px;">
+          <label style="margin-top:0;">Temporada</label>
+          <select onchange="App.onTeamStatsSeasonChange(this.value)">
+            <option value="all" ${seasonFilter==='all'?'selected':''}>Todas las temporadas</option>
+            ${uniqueSeasons.map(s=>`<option value="${s}" ${seasonFilter===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div style="max-width:260px;">
+          <label style="margin-top:0;">Fecha</label>
+          <select onchange="App.onTeamStatsDateChange(this.value)">
+            <option value="all" ${dateFilter==='all'?'selected':''}>Todas las evaluaciones (acumulado)</option>
+            ${uniqueDates.map(d=>`<option value="${d}" ${dateFilter===d?'selected':''}>Evaluaciones del ${d}</option>`).join('')}
+          </select>
+        </div>
       </div>`;
 
     if(allScores.length===0){
@@ -495,13 +645,14 @@ const App = {
     const subj = this.currentSubject;
     const col = subj.type==='player' ? 'player_id' : 'coach_id';
     const { data: evals, error: e1 } = await client.from('evaluations')
-      .select('id, evaluation_date, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
+      .select('id, evaluation_date, season, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
       .eq(col, subj.id)
       .order('evaluation_date', { ascending:false });
     if(e1) throw e1;
 
     this._statsEvals = evals || [];
     this.statsDateFilter = 'all';
+    this.statsSeasonFilter = 'all';
     this.renderStatsBody();
   },
 
@@ -510,29 +661,47 @@ const App = {
     this.renderStatsBody();
   },
 
+  onStatsSeasonChange(value){
+    this.statsSeasonFilter = value;
+    this.renderStatsBody();
+  },
+
   renderStatsBody(){
     const subj = this.currentSubject;
     const evals = this._statsEvals || [];
-    const filter = this.statsDateFilter || 'all';
-    const filteredEvals = filter==='all' ? evals : evals.filter(ev=>ev.evaluation_date===filter);
+    const dateFilter = this.statsDateFilter || 'all';
+    const seasonFilter = this.statsSeasonFilter || 'all';
+    const filteredEvals = evals
+      .filter(ev=> dateFilter==='all' || ev.evaluation_date===dateFilter)
+      .filter(ev=> seasonFilter==='all' || ev.season===seasonFilter);
 
     const allScores = [];
     filteredEvals.forEach(ev=>{
       (ev.category_summary||[]).forEach(s=> allScores.push(s));
     });
 
-    // unique dates for the dropdown, most recent first
+    // unique dates/seasons for the dropdowns, most recent first
     const uniqueDates = [...new Set(evals.map(ev=>ev.evaluation_date))];
+    const uniqueSeasons = [...new Set(evals.map(ev=>ev.season))];
 
     let html = `<div class="crumb" onclick='App.goSubject(${JSON.stringify(subj)})'>← ${subj.full_name}</div>
       <h2>Estadísticas</h2>
       <p style="color:var(--muted);font-size:.85rem;margin:4px 0 14px;">${subj.full_name} · ${evals.length} evaluación(es) registradas</p>
-      <div style="margin-bottom:18px;max-width:280px;">
-        <label style="margin-top:0;">Ver datos de</label>
-        <select onchange="App.onStatsDateChange(this.value)">
-          <option value="all" ${filter==='all'?'selected':''}>Todas las evaluaciones (acumulado)</option>
-          ${uniqueDates.map(d=>`<option value="${d}" ${filter===d?'selected':''}>Evaluación del ${d}</option>`).join('')}
-        </select>
+      <div class="row" style="margin-bottom:18px;">
+        <div style="max-width:220px;">
+          <label style="margin-top:0;">Temporada</label>
+          <select onchange="App.onStatsSeasonChange(this.value)">
+            <option value="all" ${seasonFilter==='all'?'selected':''}>Todas las temporadas</option>
+            ${uniqueSeasons.map(s=>`<option value="${s}" ${seasonFilter===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div style="max-width:260px;">
+          <label style="margin-top:0;">Fecha</label>
+          <select onchange="App.onStatsDateChange(this.value)">
+            <option value="all" ${dateFilter==='all'?'selected':''}>Todas las evaluaciones (acumulado)</option>
+            ${uniqueDates.map(d=>`<option value="${d}" ${dateFilter===d?'selected':''}>Evaluación del ${d}</option>`).join('')}
+          </select>
+        </div>
       </div>`;
 
     if(allScores.length===0){
