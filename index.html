@@ -321,7 +321,7 @@ const App = {
   async renderTeam(){
     const team = this.currentTeam;
     const [{ data: players, error: e1 }, { data: coaches, error: e2 }] = await Promise.all([
-      client.from('players').select('*').eq('team_id', team.id).eq('active', true).order('full_name'),
+      client.from('players').select('*').eq('team_id', team.id).eq('active', true).order('number', { ascending: true, nullsFirst: false }),
       client.from('coaches').select('*').eq('team_id', team.id).eq('active', true).order('full_name')
     ]);
     if(e1) throw e1; if(e2) throw e2;
@@ -345,7 +345,7 @@ const App = {
         const subj = {...p, type:'player'};
         html += `<div class="list-item">
           <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;">
-            <div class="name">${p.full_name}</div><div class="meta">${p.position||'Sin posición'}</div></div>
+            <div class="name">${p.number!=null ? `#${p.number} ` : ''}${p.full_name}</div><div class="meta">${p.number!=null ? '' : 'Sin número asignado'}</div></div>
           <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editPlayer(${JSON.stringify(p)})'>✏️</button>
           <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
       });
@@ -373,8 +373,9 @@ const App = {
     if(!name) return;
     let payload = { full_name: name, team_id: this.currentTeam.id };
     if(type==='player'){
-      const position = prompt('Posición (opcional):') || null;
-      payload.position = position;
+      const numStr = prompt('Número de dorsal (opcional):');
+      const number = numStr && numStr.trim() !== '' ? parseInt(numStr, 10) : null;
+      payload.number = isNaN(number) ? null : number;
       const { error } = await client.from('players').insert(payload);
       if(error) return alert('Error: '+error.message);
     } else {
@@ -387,8 +388,9 @@ const App = {
   async editPlayer(player){
     const name = prompt('Nombre del jugador:', player.full_name);
     if(!name) return;
-    const position = prompt('Posición (opcional):', player.position || '');
-    const { error } = await client.from('players').update({ full_name: name, position: position || null }).eq('id', player.id);
+    const numStr = prompt('Número de dorsal (opcional):', player.number!=null ? String(player.number) : '');
+    const number = numStr && numStr.trim() !== '' ? parseInt(numStr, 10) : null;
+    const { error } = await client.from('players').update({ full_name: name, number: isNaN(number) ? null : number }).eq('id', player.id);
     if(error) return alert('Error: '+error.message);
     this.renderTeam();
   },
@@ -411,7 +413,7 @@ const App = {
 
     let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(this.currentTeam)})'>← ${this.currentTeam.name}</div>
       <h2>${subj.full_name}</h2>
-      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${subj.type==='player' ? (subj.position||'Jugador') : 'Entrenador'}</p>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${subj.type==='player' ? (subj.number!=null ? `Nº ${subj.number}` : 'Sin número asignado') : 'Entrenador'}</p>
       <div class="toolbar">
         ${evals && evals.length ? `<button class="btn btn-outline" onclick="App.goStats()">📊 Estadísticas</button>` : ''}
         <button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button>
