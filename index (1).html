@@ -3,7 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Evaluación Deportiva</title>
+<title>CanteraPro</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#111111">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CanteraPro">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -38,6 +46,7 @@
   }
   .topbar .brand{font-family:'Sora',sans-serif;font-weight:800;font-size:1.15rem;letter-spacing:.2px;}
   .topbar .brand span{opacity:.65;font-weight:600;font-size:.85rem;display:block;margin-top:2px;}
+  #roleTag{margin-top:6px;padding:2px 9px;border-radius:100px;background:rgba(250,204,21,.18);color:#facc15;font-size:.7rem;font-weight:700;}
   .topbar button{background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;padding:8px 14px;border-radius:100px;font-size:.85rem;cursor:pointer;}
   .topbar button:hover{background:rgba(255,255,255,.12);}
   .nav{display:flex;gap:8px;margin-bottom:24px;}
@@ -139,6 +148,33 @@
   .status-final{background:#dcfce7;color:#166534;}
   .status-draft{background:#fef3c7;color:#92400e;}
   .toolbar{display:flex;justify-content:flex-end;gap:10px;margin-bottom:16px;}
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(19,42,46,.55);z-index:100;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  }
+  .modal-box{background:#fff;border-radius:16px;padding:24px;max-width:400px;width:100%;max-height:88vh;overflow-y:auto;}
+  .modal-box h3{margin-bottom:16px;}
+  .avatar{
+    width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0;
+    background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:.85rem;
+  }
+  .avatar-lg{width:64px;height:64px;font-size:1.3rem;}
+  .avatar-picker{display:flex;align-items:center;gap:14px;margin-bottom:6px;}
+  .avatar-picker .avatar{width:56px;height:56px;font-size:1.1rem;}
+  .semaforo-opt{
+    display:flex;align-items:flex-start;gap:12px;padding:12px;border:2px solid var(--line);
+    border-radius:10px;margin-bottom:8px;cursor:pointer;background:#fff;
+  }
+  .semaforo-opt.selected{border-color:var(--teal);background:#f3f7f6;}
+  .semaforo-dot{width:16px;height:16px;border-radius:50%;flex-shrink:0;margin-top:2px;}
+  .bar-chart{display:flex;flex-direction:column;gap:12px;}
+  .bar-row{display:flex;align-items:center;gap:10px;}
+  .bar-label{width:110px;flex-shrink:0;font-size:.8rem;color:var(--muted);font-weight:600;}
+  .bar-track{flex:1;background:#f0ede3;border-radius:6px;height:16px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:6px;transition:width .3s;min-width:3px;}
+  .bar-count{width:64px;text-align:right;font-size:.8rem;font-weight:700;color:var(--ink);flex-shrink:0;}
+  .bar-count-sub{font-size:.68rem;font-weight:500;color:var(--muted);}
   @media print{
     .topbar,.nav,.crumb,.toolbar,.no-print{display:none !important;}
     body{background:#fff;}
@@ -148,7 +184,7 @@
 </head>
 <body>
 <div class="topbar no-print" id="topbar" style="display:none;">
-  <div class="brand">Evaluación Deportiva<span id="userEmail"></span></div>
+  <div class="brand">CanteraPro<span id="userEmail"></span><span id="roleTag"></span></div>
   <button onclick="App.logout()">Cerrar sesión</button>
 </div>
 <div id="app"></div>
@@ -171,6 +207,7 @@ const App = {
     const { data:{ session } } = await client.auth.getSession();
     if(session){
       this.user = session.user;
+      await this.loadUserRole();
       document.getElementById('topbar').style.display='flex';
       document.getElementById('userEmail').textContent = session.user.email;
       this.view = 'teams';
@@ -178,9 +215,33 @@ const App = {
     this.render();
   },
 
+  async loadUserRole(){
+    try{
+      const { data, error } = await client.from('profiles').select('role').eq('id', this.user.id).single();
+      this.userRole = (!error && data) ? data.role : 'viewer';
+    }catch(e){
+      this.userRole = 'viewer'; // por seguridad, si algo falla, mejor asumir el rol más restrictivo
+    }
+    const tag = document.getElementById('roleTag');
+    if(tag) tag.textContent = this.userRole==='viewer' ? 'Solo lectura' : '';
+  },
+
+  isAdmin(){
+    return this.userRole === 'admin';
+  },
+
+  requireAdmin(){
+    if(!this.isAdmin()){
+      alert('Tu cuenta es de solo lectura. No puedes crear, editar ni borrar datos.');
+      return false;
+    }
+    return true;
+  },
+
   async logout(){
     await client.auth.signOut();
     this.user = null;
+    this.userRole = null;
     document.getElementById('topbar').style.display='none';
     this.view = 'login';
     this.render();
@@ -197,6 +258,7 @@ const App = {
       return;
     }
     this.user = data.user;
+    await this.loadUserRole();
     document.getElementById('topbar').style.display='flex';
     document.getElementById('userEmail').textContent = data.user.email;
     this.view = 'teams';
@@ -204,8 +266,11 @@ const App = {
   },
 
   goTeams(){ this.view='teams'; this.currentTeam=null; this.render(); },
+  goClubStats(){ this.view='clubStats'; this.render(); },
   goTeam(team){ this.currentTeam = team; this.view='team'; this.render(); },
+  goTeamStats(){ this.view='teamStats'; this.render(); },
   goSubject(subject){ this.currentSubject = subject; this.view='subject'; this.render(); },
+  goStats(){ this.view='stats'; this.render(); },
 
   async render(){
     const app = document.getElementById('app');
@@ -213,8 +278,11 @@ const App = {
     try{
       if(this.view==='login') return this.renderLogin();
       if(this.view==='teams') return this.renderTeams();
+      if(this.view==='clubStats') return this.renderClubStats();
       if(this.view==='team') return this.renderTeam();
+      if(this.view==='teamStats') return this.renderTeamStats();
       if(this.view==='subject') return this.renderSubject();
+      if(this.view==='stats') return this.renderStats();
       if(this.view==='newEvaluation') return this.renderEvaluationForm();
       if(this.view==='report') return this.renderReport();
     }catch(err){
@@ -227,7 +295,7 @@ const App = {
   renderLogin(){
     document.getElementById('app').innerHTML = `
       <div class="login-wrap">
-        <h1>⚽ Evaluación Deportiva</h1>
+        <h1>🏀 CanteraPro</h1>
         <p>Inicia sesión para continuar</p>
         <div class="card">
           <label>Email</label>
@@ -248,7 +316,11 @@ const App = {
     const { data: teams, error } = await client.from('teams').select('*').order('name');
     if(error) throw error;
     let html = `<div class="section-title"><h2>Equipos</h2>
-      <button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button></div>`;
+      <div class="row">
+        ${teams && teams.length>1 ? `<button class="btn btn-outline" onclick="App.goClubStats()">📊 Estadísticas del club</button>` : ''}
+        ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.exportFullBackup(this)">💾 Copia de seguridad</button>` : ''}
+        ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button>` : ''}
+      </div></div>`;
     if(!teams || teams.length===0){
       html += `<div class="empty"><div class="big">🏟️</div>Todavía no hay equipos.<br>Crea el primero para empezar.</div>`;
     } else {
@@ -262,6 +334,7 @@ const App = {
   },
 
   async editTeam(){
+    if(!this.requireAdmin()) return;
     const team = this.currentTeam;
     const name = prompt('Nombre del equipo:', team.name);
     if(!name) return;
@@ -273,7 +346,200 @@ const App = {
     this.renderTeam();
   },
 
+  async deleteTeam(){
+    if(!this.requireAdmin()) return;
+    const team = this.currentTeam;
+    const typed = prompt(
+      `Esta acción eliminará el equipo "${team.name}" y TODOS sus jugadores, entrenadores y evaluaciones. No se puede deshacer.\n\nEscribe el nombre exacto del equipo para confirmar:`
+    );
+    if(typed !== team.name){
+      if(typed !== null) alert('El nombre no coincide. No se ha eliminado nada.');
+      return;
+    }
+    const { error: e1 } = await client.from('players').delete().eq('team_id', team.id);
+    if(e1) return alert('Error al eliminar jugadores: '+e1.message);
+    const { error: e2 } = await client.from('coaches').delete().eq('team_id', team.id);
+    if(e2) return alert('Error al eliminar entrenadores: '+e2.message);
+    const { error: e3 } = await client.from('teams').delete().eq('id', team.id);
+    if(e3) return alert('Error al eliminar el equipo: '+e3.message);
+    this.goTeams();
+  },
+
+  csvEscape(val){
+    if(val===null || val===undefined) return '';
+    const s = String(val).replace(/"/g,'""');
+    return /[",\n;]/.test(s) ? `"${s}"` : s;
+  },
+
+  downloadCSV(filename, rows){
+    const csv = rows.map(row=> row.map(c=>this.csvEscape(c)).join(';')).join('\r\n');
+    const blob = new Blob(['\uFEFF'+csv], { type:'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  downloadJSON(filename, obj){
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  // Descarga TODO el contenido de la base de datos (menos los usuarios de
+  // Authentication, que Supabase no expone por API) en un único archivo
+  // .json. Es tu copia de seguridad: guárdala en un sitio seguro (Google
+  // Drive, tu ordenador...) de vez en cuando, sobre todo antes de hacer
+  // cambios grandes en la app.
+  async exportFullBackup(btn){
+    if(btn){ btn.disabled = true; btn.textContent = 'Generando copia...'; }
+    try{
+      const tables = ['teams','players','coaches','evaluation_templates','scale_levels',
+                       'categories','criteria','evaluations','evaluation_scores'];
+      const backup = { generated_at: new Date().toISOString(), app: 'CanteraPro' };
+      for(const t of tables){
+        const { data, error } = await client.from(t).select('*');
+        if(error){ alert(`Error exportando la tabla ${t}: ${error.message}`); if(btn){ btn.disabled=false; btn.textContent='💾 Copia de seguridad'; } return; }
+        backup[t] = data;
+      }
+      const dateStr = new Date().toISOString().slice(0,10);
+      this.downloadJSON(`backup_canterapro_${dateStr}.json`, backup);
+    } finally {
+      if(btn){ btn.disabled = false; btn.textContent = '💾 Copia de seguridad'; }
+    }
+  },
+
+  async exportTeamCSV(){
+    const team = this.currentTeam;
+    const btnLabel = 'Exportando...';
+    const [{ data: players }, { data: coaches }] = await Promise.all([
+      client.from('players').select('id, full_name, number').eq('team_id', team.id),
+      client.from('coaches').select('id, full_name').eq('team_id', team.id)
+    ]);
+    const playerIds = (players||[]).map(p=>p.id);
+    const coachIds = (coaches||[]).map(c=>c.id);
+    const nameById = {};
+    (players||[]).forEach(p=> nameById[p.id] = p.number!=null ? `#${p.number} ${p.full_name}` : p.full_name);
+    (coaches||[]).forEach(c=> nameById[c.id] = c.full_name);
+
+    let evals = [];
+    if(playerIds.length){
+      const { data } = await client.from('evaluations').select('*').in('player_id', playerIds);
+      evals = evals.concat(data||[]);
+    }
+    if(coachIds.length){
+      const { data } = await client.from('evaluations').select('*').in('coach_id', coachIds);
+      evals = evals.concat(data||[]);
+    }
+    if(evals.length===0){
+      alert('Este equipo todavía no tiene evaluaciones para exportar.');
+      return;
+    }
+    const evalIds = evals.map(e=>e.id);
+    const { data: scores, error } = await client.from('evaluation_scores')
+      .select('*, criteria(name, max_score, categories(name)), scale_levels(label)')
+      .in('evaluation_id', evalIds);
+    if(error) return alert('Error: '+error.message);
+
+    const evalById = {};
+    evals.forEach(e=> evalById[e.id] = e);
+
+    const rows = [['Equipo','Persona','Tipo','Fecha','Temporada','Estado','Categoría','Criterio','Valoración','Puntuación','Máximo','Observación']];
+    scores.forEach(s=>{
+      const ev = evalById[s.evaluation_id];
+      if(!ev) return;
+      const personId = ev.player_id || ev.coach_id;
+      rows.push([
+        team.name,
+        nameById[personId] || '(desconocido)',
+        ev.subject_type==='player' ? 'Jugador' : 'Entrenador',
+        ev.evaluation_date,
+        ev.season,
+        ev.status==='final' ? 'Cerrada' : 'Borrador',
+        s.criteria && s.criteria.categories ? s.criteria.categories.name : '',
+        s.criteria ? s.criteria.name : '',
+        s.scale_levels ? s.scale_levels.label : '',
+        s.numeric_score!=null ? s.numeric_score : '',
+        s.criteria && s.criteria.max_score!=null ? s.criteria.max_score : '',
+        s.observation || ''
+      ]);
+    });
+    this.downloadCSV(`evaluaciones_${team.name.replace(/[^a-z0-9]+/gi,'_')}.csv`, rows);
+  },
+
+  async exportClubCSV(){
+    const [{ data: teams }, { data: players }, { data: coaches }] = await Promise.all([
+      client.from('teams').select('id, name'),
+      client.from('players').select('id, full_name, number, team_id'),
+      client.from('coaches').select('id, full_name, team_id')
+    ]);
+    const teamNameById = {};
+    (teams||[]).forEach(t=> teamNameById[t.id] = t.name);
+    const nameById = {};
+    const teamIdByPerson = {};
+    (players||[]).forEach(p=>{
+      nameById[p.id] = p.number!=null ? `#${p.number} ${p.full_name}` : p.full_name;
+      teamIdByPerson[p.id] = p.team_id;
+    });
+    (coaches||[]).forEach(c=>{
+      nameById[c.id] = c.full_name;
+      teamIdByPerson[c.id] = c.team_id;
+    });
+
+    const playerIds = (players||[]).map(p=>p.id);
+    const coachIds = (coaches||[]).map(c=>c.id);
+    let evals = [];
+    if(playerIds.length){
+      const { data } = await client.from('evaluations').select('*').in('player_id', playerIds);
+      evals = evals.concat(data||[]);
+    }
+    if(coachIds.length){
+      const { data } = await client.from('evaluations').select('*').in('coach_id', coachIds);
+      evals = evals.concat(data||[]);
+    }
+    if(evals.length===0){
+      alert('El club todavía no tiene evaluaciones para exportar.');
+      return;
+    }
+    const evalIds = evals.map(e=>e.id);
+    const { data: scores, error } = await client.from('evaluation_scores')
+      .select('*, criteria(name, max_score, categories(name)), scale_levels(label)')
+      .in('evaluation_id', evalIds);
+    if(error) return alert('Error: '+error.message);
+
+    const evalById = {};
+    evals.forEach(e=> evalById[e.id] = e);
+
+    const rows = [['Equipo','Persona','Tipo','Fecha','Temporada','Estado','Categoría','Criterio','Valoración','Puntuación','Máximo','Observación']];
+    scores.forEach(s=>{
+      const ev = evalById[s.evaluation_id];
+      if(!ev) return;
+      const personId = ev.player_id || ev.coach_id;
+      const teamId = teamIdByPerson[personId];
+      rows.push([
+        teamNameById[teamId] || '(sin equipo)',
+        nameById[personId] || '(desconocido)',
+        ev.subject_type==='player' ? 'Jugador' : 'Entrenador',
+        ev.evaluation_date,
+        ev.season,
+        ev.status==='final' ? 'Cerrada' : 'Borrador',
+        s.criteria && s.criteria.categories ? s.criteria.categories.name : '',
+        s.criteria ? s.criteria.name : '',
+        s.scale_levels ? s.scale_levels.label : '',
+        s.numeric_score!=null ? s.numeric_score : '',
+        s.criteria && s.criteria.max_score!=null ? s.criteria.max_score : '',
+        s.observation || ''
+      ]);
+    });
+    this.downloadCSV('evaluaciones_club_completo.csv', rows);
+  },
+
   async promptNewTeam(){
+    if(!this.requireAdmin()) return;
     const name = prompt('Nombre del equipo:');
     if(!name) return;
     const season = prompt('Temporada (ej. 2025/26):', '2025/26');
@@ -286,35 +552,100 @@ const App = {
   // ---------- TEAM DETAIL ----------
   async renderTeam(){
     const team = this.currentTeam;
-    const [{ data: players, error: e1 }, { data: coaches, error: e2 }] = await Promise.all([
-      client.from('players').select('*').eq('team_id', team.id).eq('active', true).order('full_name'),
-      client.from('coaches').select('*').eq('team_id', team.id).eq('active', true).order('full_name')
+    const [{ data: allPlayers, error: e1 }, { data: allCoaches, error: e2 }] = await Promise.all([
+      client.from('players').select('*').eq('team_id', team.id).order('number', { ascending: true, nullsFirst: false }),
+      client.from('coaches').select('*').eq('team_id', team.id).order('full_name')
     ]);
     if(e1) throw e1; if(e2) throw e2;
+
+    const players = (allPlayers||[]).filter(p=>p.active);
+    const inactivePlayers = (allPlayers||[]).filter(p=>!p.active);
+    const coaches = (allCoaches||[]).filter(c=>c.active);
+    const inactiveCoaches = (allCoaches||[]).filter(c=>!c.active);
+
+    // ---- Calcular hace cuánto fue la última evaluación de cada uno ----
+    const STALE_DAYS = 90;
+    const lastEvalByPerson = {};
+    const playerIds = players.map(p=>p.id);
+    const coachIds = coaches.map(c=>c.id);
+    if(playerIds.length || coachIds.length){
+      const orFilters = [];
+      if(playerIds.length) orFilters.push(`player_id.in.(${playerIds.join(',')})`);
+      if(coachIds.length) orFilters.push(`coach_id.in.(${coachIds.join(',')})`);
+      const { data: recentEvals } = await client.from('evaluations')
+        .select('player_id, coach_id, evaluation_date')
+        .or(orFilters.join(','));
+      (recentEvals||[]).forEach(ev=>{
+        const pid = ev.player_id || ev.coach_id;
+        if(!lastEvalByPerson[pid] || ev.evaluation_date > lastEvalByPerson[pid]){
+          lastEvalByPerson[pid] = ev.evaluation_date;
+        }
+      });
+    }
+    const staleBadge = (personId)=>{
+      const lastDate = lastEvalByPerson[personId];
+      const daysSince = lastDate ? Math.floor((Date.now() - new Date(lastDate)) / 86400000) : null;
+      if(daysSince===null){
+        return `<span class="pill" style="background:#fee2e2;color:#b91c1c;margin-left:8px;">Nunca evaluado</span>`;
+      }
+      if(daysSince > STALE_DAYS){
+        return `<span class="pill" style="background:#fef3c7;color:#92400e;margin-left:8px;">⚠️ Hace ${daysSince} días</span>`;
+      }
+      return '';
+    };
+
+    const isAdmin = this.isAdmin();
 
     let html = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div><h2>${team.name}</h2><p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">Temporada ${team.season}</p></div>
-        <button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>
+        <div class="row">
+          <button class="btn btn-outline" onclick="App.goTeamStats()">📊 Estadísticas del equipo</button>
+          <button class="btn btn-outline" onclick="App.exportTeamCSV()">⬇️ Exportar CSV</button>
+          ${isAdmin ? `<button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="App.deleteTeam()">🗑️ Eliminar equipo</button>` : ''}
+        </div>
       </div>`;
 
     html += `<div class="section-title"><h2>Jugadores</h2>
-      <button class="btn btn-outline" onclick="App.promptNewPerson('player')">+ Añadir jugador</button></div>`;
+      ${isAdmin ? `<button class="btn btn-outline" onclick="App.promptNewPerson('player')">+ Añadir jugador</button>` : ''}</div>`;
     if(!players || players.length===0){
       html += `<div class="empty">Sin jugadores todavía.</div>`;
     } else {
       players.forEach(p=>{
         const subj = {...p, type:'player'};
+        const avatarHtml = p.photo_url
+          ? `<img src="${p.photo_url}" class="avatar" style="width:36px;height:36px;">`
+          : `<div class="avatar" style="width:36px;height:36px;font-size:.75rem;">${this.initials(p.full_name)}</div>`;
         html += `<div class="list-item">
-          <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;">
-            <div class="name">${p.full_name}</div><div class="meta">${p.position||'Sin posición'}</div></div>
-          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editPlayer(${JSON.stringify(p)})'>✏️</button>
+          <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;display:flex;align-items:center;gap:12px;">
+            ${avatarHtml}
+            <div><div class="name">${p.number!=null ? `#${p.number} ` : ''}${p.full_name}${staleBadge(p.id)}</div><div class="meta">${p.number!=null ? '' : 'Sin número asignado'}</div></div>
+          </div>
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editPlayer(${JSON.stringify(p)})'>✏️</button>` : ''}
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("players", "${p.id}", false)'>⏸️</button>` : ''}
           <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
       });
     }
 
+    if(inactivePlayers.length){
+      html += `<div class="category-block" id="cat-inactive-players">
+        <div class="category-header" onclick="App.toggleCategory('inactive-players')">
+          <h3 style="color:var(--muted);">Jugadores dados de baja<span class="count">${inactivePlayers.length}</span></h3>
+          <span class="chev">▾</span>
+        </div>
+        <div class="category-body" style="display:block;grid-template-columns:none;">`;
+      inactivePlayers.forEach(p=>{
+        html += `<div class="list-item" style="opacity:.7;">
+          <div style="flex:1;"><div class="name">${p.number!=null ? `#${p.number} ` : ''}${p.full_name}</div></div>
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Reactivar" onclick='App.togglePersonActive("players", "${p.id}", true)'>↩️ Reactivar</button>` : ''}
+        </div>`;
+      });
+      html += `</div></div>`;
+    }
+
     html += `<div class="section-title"><h2>Entrenadores</h2>
-      <button class="btn btn-outline" onclick="App.promptNewPerson('coach')">+ Añadir entrenador</button></div>`;
+      ${isAdmin ? `<button class="btn btn-outline" onclick="App.promptNewPerson('coach')">+ Añadir entrenador</button>` : ''}</div>`;
     if(!coaches || coaches.length===0){
       html += `<div class="empty">Sin entrenadores todavía.</div>`;
     } else {
@@ -322,40 +653,191 @@ const App = {
         const subj = {...c, type:'coach'};
         html += `<div class="list-item">
           <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;">
-            <div class="name">${c.full_name}</div></div>
-          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editCoach(${JSON.stringify(c)})'>✏️</button>
+            <div class="name">${c.full_name}${staleBadge(c.id)}</div></div>
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editCoach(${JSON.stringify(c)})'>✏️</button>` : ''}
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("coaches", "${c.id}", false)'>⏸️</button>` : ''}
           <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
       });
     }
+
+    if(inactiveCoaches.length){
+      html += `<div class="category-block" id="cat-inactive-coaches">
+        <div class="category-header" onclick="App.toggleCategory('inactive-coaches')">
+          <h3 style="color:var(--muted);">Entrenadores dados de baja<span class="count">${inactiveCoaches.length}</span></h3>
+          <span class="chev">▾</span>
+        </div>
+        <div class="category-body" style="display:block;grid-template-columns:none;">`;
+      inactiveCoaches.forEach(c=>{
+        html += `<div class="list-item" style="opacity:.7;">
+          <div style="flex:1;"><div class="name">${c.full_name}</div></div>
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Reactivar" onclick='App.togglePersonActive("coaches", "${c.id}", true)'>↩️ Reactivar</button>` : ''}
+        </div>`;
+      });
+      html += `</div></div>`;
+    }
+
     document.getElementById('app').innerHTML = html;
   },
 
-  async promptNewPerson(type){
-    const name = prompt(type==='player' ? 'Nombre del jugador:' : 'Nombre del entrenador:');
-    if(!name) return;
-    let payload = { full_name: name, team_id: this.currentTeam.id };
-    if(type==='player'){
-      const position = prompt('Posición (opcional):') || null;
-      payload.position = position;
-      const { error } = await client.from('players').insert(payload);
-      if(error) return alert('Error: '+error.message);
-    } else {
-      const { error } = await client.from('coaches').insert(payload);
-      if(error) return alert('Error: '+error.message);
+  async togglePersonActive(table, id, newActive){
+    if(!this.requireAdmin()) return;
+    if(!newActive){
+      const ok = confirm('¿Dar de baja a este jugador/entrenador? No se borra nada, solo dejará de aparecer en la lista principal. Podrás reactivarlo cuando quieras.');
+      if(!ok) return;
     }
-    this.renderTeam();
-  },
-
-  async editPlayer(player){
-    const name = prompt('Nombre del jugador:', player.full_name);
-    if(!name) return;
-    const position = prompt('Posición (opcional):', player.position || '');
-    const { error } = await client.from('players').update({ full_name: name, position: position || null }).eq('id', player.id);
+    const { error } = await client.from(table).update({ active: newActive }).eq('id', id);
     if(error) return alert('Error: '+error.message);
     this.renderTeam();
   },
 
+  async promptNewPerson(type){
+    if(!this.requireAdmin()) return;
+    if(type==='player'){
+      this.openPlayerModal(null);
+      return;
+    }
+    const name = prompt('Nombre del entrenador:');
+    if(!name) return;
+    const { error } = await client.from('coaches').insert({ full_name: name, team_id: this.currentTeam.id });
+    if(error) return alert('Error: '+error.message);
+    this.renderTeam();
+  },
+
+  editPlayer(player){
+    this.openPlayerModal(player);
+  },
+
+  initials(name){
+    if(!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    return ((parts[0]?.[0]||'') + (parts[1]?.[0]||'')).toUpperCase();
+  },
+
+  openPlayerModal(player){
+    if(!this.requireAdmin()) return;
+    const isEdit = !!player;
+    const currentPhoto = player && player.photo_url ? player.photo_url : null;
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'playerModalOverlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3>${isEdit ? 'Editar jugador' : 'Añadir jugador'}</h3>
+        <div class="avatar-picker">
+          <div class="avatar" id="playerModalAvatarPreview">
+            ${currentPhoto ? `<img src="${currentPhoto}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : this.initials(player ? player.full_name : '')}
+          </div>
+          <div style="flex:1;">
+            <label style="margin-top:0;">Foto (opcional)</label>
+            <input type="file" accept="image/*" id="playerModalPhotoInput" onchange="App.previewPlayerPhoto(event)">
+          </div>
+        </div>
+        <label>Nombre</label>
+        <input type="text" id="playerModalName" value="${player ? player.full_name.replace(/"/g,'&quot;') : ''}" placeholder="Nombre completo">
+        <label>Número de dorsal (opcional)</label>
+        <input type="number" id="playerModalNumber" value="${player && player.number!=null ? player.number : ''}" placeholder="Ej. 7">
+        <div class="row" style="margin-top:20px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="App.closePlayerModal()">Cancelar</button>
+          <button class="btn btn-primary" id="playerModalSaveBtn" style="flex:1;" onclick="App.savePlayerModal(${isEdit ? `'${player.id}'` : 'null'})">Guardar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  },
+
+  closePlayerModal(){
+    const el = document.getElementById('playerModalOverlay');
+    if(el) el.remove();
+  },
+
+  // Reduce el tamaño de la foto antes de subirla, para no gastar de más
+  // el almacenamiento gratuito de Supabase (limitado). Redimensiona al
+  // lado más largo a un máximo y la convierte a JPEG de calidad 0.8.
+  compressImage(file, maxDim=700, quality=0.8){
+    return new Promise((resolve, reject)=>{
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = e=>{ img.src = e.target.result; };
+      reader.onerror = reject;
+      img.onload = ()=>{
+        let { width, height } = img;
+        if(width > height && width > maxDim){
+          height = Math.round(height * (maxDim/width)); width = maxDim;
+        } else if(height > maxDim){
+          width = Math.round(width * (maxDim/height)); height = maxDim;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob=>{
+          if(!blob) return reject(new Error('No se pudo procesar la imagen'));
+          resolve(new File([blob], 'photo.jpg', { type:'image/jpeg' }));
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  },
+
+  previewPlayerPhoto(event){
+    const file = event.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = e=>{
+      document.getElementById('playerModalAvatarPreview').innerHTML =
+        `<img src="${e.target.result}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+    };
+    reader.readAsDataURL(file);
+  },
+
+  async savePlayerModal(playerId){
+    const name = document.getElementById('playerModalName').value.trim();
+    if(!name){ alert('Escribe un nombre.'); return; }
+    const numStr = document.getElementById('playerModalNumber').value;
+    const number = numStr && numStr.trim() !== '' ? parseInt(numStr, 10) : null;
+    const fileInput = document.getElementById('playerModalPhotoInput');
+    const file = fileInput.files[0];
+
+    const btn = document.getElementById('playerModalSaveBtn');
+    btn.disabled = true; btn.textContent = 'Guardando...';
+
+    let photo_url = undefined; // undefined = don't touch existing value
+    if(file){
+      let uploadFile;
+      try{
+        uploadFile = await this.compressImage(file);
+      }catch(e){
+        uploadFile = file; // si algo falla al comprimir, sube el original
+      }
+      const path = `${playerId || 'new-' + Date.now()}-${Date.now()}.jpg`;
+      const { error: uploadErr } = await client.storage.from('player-photos').upload(path, uploadFile, { upsert:true });
+      if(uploadErr){
+        btn.disabled = false; btn.textContent = 'Guardar';
+        alert('No se pudo subir la foto: '+uploadErr.message+'\n\n¿Has creado el bucket "player-photos" en Supabase Storage?');
+        return;
+      }
+      const { data: pub } = client.storage.from('player-photos').getPublicUrl(path);
+      photo_url = pub.publicUrl;
+    }
+
+    const payload = { full_name: name, number: isNaN(number) ? null : number };
+    if(photo_url !== undefined) payload.photo_url = photo_url;
+
+    let error;
+    if(playerId){
+      ({ error } = await client.from('players').update(payload).eq('id', playerId));
+    } else {
+      payload.team_id = this.currentTeam.id;
+      ({ error } = await client.from('players').insert(payload));
+    }
+
+    btn.disabled = false; btn.textContent = 'Guardar';
+    if(error) return alert('Error: '+error.message);
+    this.closePlayerModal();
+    this.renderTeam();
+  },
+
   async editCoach(coach){
+    if(!this.requireAdmin()) return;
     const name = prompt('Nombre del entrenador:', coach.full_name);
     if(!name) return;
     const { error } = await client.from('coaches').update({ full_name: name }).eq('id', coach.id);
@@ -371,10 +853,22 @@ const App = {
       .select('*').eq(col, subj.id).order('evaluation_date', { ascending:false });
     if(error) throw error;
 
+    const avatarHtml = subj.type==='player'
+      ? (subj.photo_url
+          ? `<img src="${subj.photo_url}" class="avatar avatar-lg">`
+          : `<div class="avatar avatar-lg">${this.initials(subj.full_name)}</div>`)
+      : '';
+
     let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(this.currentTeam)})'>← ${this.currentTeam.name}</div>
-      <h2>${subj.full_name}</h2>
-      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${subj.type==='player' ? (subj.position||'Jugador') : 'Entrenador'}</p>
-      <div class="toolbar"><button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button></div>`;
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px;">
+        ${avatarHtml}
+        <div><h2>${subj.full_name}</h2>
+        <p style="color:var(--muted);font-size:.85rem;margin:2px 0 0;">${subj.type==='player' ? (subj.number!=null ? `Nº ${subj.number}` : 'Sin número asignado') : 'Entrenador'}</p></div>
+      </div>
+      <div class="toolbar" style="margin-top:16px;">
+        ${subj.type==='player' && evals && evals.length ? `<button class="btn btn-outline" onclick="App.goStats()">📊 Estadísticas</button>` : ''}
+        ${this.isAdmin() ? `<button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button>` : ''}
+      </div>`;
 
     if(!evals || evals.length===0){
       html += `<div class="empty"><div class="big">📋</div>Todavía no hay evaluaciones.</div>`;
@@ -392,16 +886,419 @@ const App = {
   },
 
   // ---------- NEW EVALUATION ----------
+  // ---------- CLUB STATS (aggregates all teams / all players) ----------
+  async renderClubStats(){
+    const { data: teams, error: e0 } = await client.from('teams').select('*').order('name');
+    if(e0) throw e0;
+
+    const { data: players, error: e1 } = await client.from('players')
+      .select('id, team_id').eq('active', true);
+    if(e1) throw e1;
+
+    if(!players || players.length===0){
+      document.getElementById('app').innerHTML = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
+        <h2>Estadísticas del club</h2>
+        <div class="empty"><div class="big">📊</div>Todavía no hay jugadores registrados en el club.</div>`;
+      return;
+    }
+
+    const playerIds = players.map(p=>p.id);
+    const { data: evals, error: e2 } = await client.from('evaluations')
+      .select('id, player_id, season, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
+      .in('player_id', playerIds);
+    if(e2) throw e2;
+
+    this._clubStatsTeams = teams || [];
+    this._clubStatsPlayers = players;
+    this._clubStatsEvals = evals || [];
+    this.clubStatsSeasonFilter = 'all';
+    this.renderClubStatsBody();
+  },
+
+  onClubStatsSeasonChange(value){
+    this.clubStatsSeasonFilter = value;
+    this.renderClubStatsBody();
+  },
+
+  renderClubStatsBody(){
+    const teams = this._clubStatsTeams || [];
+    const players = this._clubStatsPlayers || [];
+    const evals = this._clubStatsEvals || [];
+    const seasonFilter = this.clubStatsSeasonFilter || 'all';
+    const filteredEvals = seasonFilter==='all' ? evals : evals.filter(ev=>ev.season===seasonFilter);
+    const uniqueSeasons = [...new Set(evals.map(ev=>ev.season))];
+
+    let html = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div><h2>Estadísticas del club</h2>
+        <p style="color:var(--muted);font-size:.85rem;margin:4px 0 14px;">${teams.length} equipo(s) · ${players.length} jugador(es) en total</p></div>
+        <button class="btn btn-outline" onclick="App.exportClubCSV()">⬇️ Exportar CSV</button>
+      </div>
+      <div style="margin-bottom:18px;max-width:220px;">
+        <label style="margin-top:0;">Temporada</label>
+        <select onchange="App.onClubStatsSeasonChange(this.value)">
+          <option value="all" ${seasonFilter==='all'?'selected':''}>Todas las temporadas</option>
+          ${uniqueSeasons.map(s=>`<option value="${s}" ${seasonFilter===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </div>`;
+
+    const allScores = [];
+    filteredEvals.forEach(ev=>{
+      (ev.category_summary||[]).forEach(s=> allScores.push(s));
+    });
+
+    if(allScores.length===0){
+      html += `<div class="empty"><div class="big">📊</div>No hay evaluaciones para esta selección.</div>`;
+      document.getElementById('app').innerHTML = html;
+      return;
+    }
+
+    // ---- Overall club summary ----
+    html += `<div class="card"><h3 style="margin-bottom:14px;">Resumen general del club</h3>`;
+    html += this.buildBarChart(allScores);
+    html += `</div>`;
+
+    // ---- Comparison between teams ----
+    const playerToTeam = {};
+    players.forEach(p=> playerToTeam[p.id] = p.team_id);
+    const evalsByTeam = {};
+    filteredEvals.forEach(ev=>{
+      const teamId = playerToTeam[ev.player_id];
+      if(!teamId) return;
+      if(!evalsByTeam[teamId]) evalsByTeam[teamId] = [];
+      (ev.category_summary||[]).forEach(s=> evalsByTeam[teamId].push(s));
+    });
+
+    const teamsWithData = teams.filter(t=> evalsByTeam[t.id] && evalsByTeam[t.id].length);
+    if(teamsWithData.length > 1){
+      html += `<div class="section-title"><h2 style="font-size:1rem;">Comparativa por equipo</h2></div>`;
+      teamsWithData.forEach(t=>{
+        html += `<div class="card"><h3 style="margin-bottom:14px;">${t.name} <span style="font-weight:500;color:var(--muted);font-size:.78rem;">· ${t.season}</span></h3>`;
+        html += this.buildBarChart(evalsByTeam[t.id]);
+        html += `</div>`;
+      });
+    }
+
+    // ---- Distribution per category (whole club) ----
+    const byCategory = {};
+    allScores.forEach(s=>{
+      const catName = s.criteria && s.criteria.categories ? s.criteria.categories.name : 'General';
+      if(!byCategory[catName]) byCategory[catName] = [];
+      byCategory[catName].push(s);
+    });
+    html += `<div class="section-title"><h2 style="font-size:1rem;">Por categoría (todo el club)</h2></div>`;
+    Object.keys(byCategory).forEach(catName=>{
+      html += `<div class="card"><h3 style="margin-bottom:14px;">${catName}</h3>`;
+      html += this.buildBarChart(byCategory[catName]);
+      html += `</div>`;
+    });
+
+    document.getElementById('app').innerHTML = html;
+  },
+
+  // ---------- TEAM STATS (aggregates all players in the team) ----------
+  async renderTeamStats(){
+    const team = this.currentTeam;
+    const { data: players, error: e0 } = await client.from('players')
+      .select('id').eq('team_id', team.id).eq('active', true);
+    if(e0) throw e0;
+    const playerIds = (players||[]).map(p=>p.id);
+
+    if(playerIds.length===0){
+      document.getElementById('app').innerHTML = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(team)})'>← ${team.name}</div>
+        <h2>Estadísticas del equipo</h2>
+        <div class="empty"><div class="big">📊</div>Este equipo todavía no tiene jugadores.</div>`;
+      return;
+    }
+
+    const { data: evals, error: e1 } = await client.from('evaluations')
+      .select('id, player_id, evaluation_date, season, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
+      .in('player_id', playerIds)
+      .order('evaluation_date', { ascending:false });
+    if(e1) throw e1;
+
+    this._teamStatsEvals = evals || [];
+    this._teamStatsPlayerCount = playerIds.length;
+    this.teamStatsDateFilter = 'all';
+    this.teamStatsSeasonFilter = 'all';
+    this.renderTeamStatsBody();
+  },
+
+  onTeamStatsDateChange(value){
+    this.teamStatsDateFilter = value;
+    this.renderTeamStatsBody();
+  },
+
+  onTeamStatsSeasonChange(value){
+    this.teamStatsSeasonFilter = value;
+    this.renderTeamStatsBody();
+  },
+
+  renderTeamStatsBody(){
+    const team = this.currentTeam;
+    const evals = this._teamStatsEvals || [];
+    const dateFilter = this.teamStatsDateFilter || 'all';
+    const seasonFilter = this.teamStatsSeasonFilter || 'all';
+    const filteredEvals = evals
+      .filter(ev=> dateFilter==='all' || ev.evaluation_date===dateFilter)
+      .filter(ev=> seasonFilter==='all' || ev.season===seasonFilter);
+
+    const allScores = [];
+    filteredEvals.forEach(ev=>{
+      (ev.category_summary||[]).forEach(s=> allScores.push(s));
+    });
+
+    const uniqueDates = [...new Set(evals.map(ev=>ev.evaluation_date))];
+    const uniqueSeasons = [...new Set(evals.map(ev=>ev.season))];
+
+    let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(team)})'>← ${team.name}</div>
+      <h2>Estadísticas del equipo</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 14px;">${team.name} · ${this._teamStatsPlayerCount} jugador(es)</p>
+      <div class="row" style="margin-bottom:18px;">
+        <div style="max-width:220px;">
+          <label style="margin-top:0;">Temporada</label>
+          <select onchange="App.onTeamStatsSeasonChange(this.value)">
+            <option value="all" ${seasonFilter==='all'?'selected':''}>Todas las temporadas</option>
+            ${uniqueSeasons.map(s=>`<option value="${s}" ${seasonFilter===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div style="max-width:260px;">
+          <label style="margin-top:0;">Fecha</label>
+          <select onchange="App.onTeamStatsDateChange(this.value)">
+            <option value="all" ${dateFilter==='all'?'selected':''}>Todas las evaluaciones (acumulado)</option>
+            ${uniqueDates.map(d=>`<option value="${d}" ${dateFilter===d?'selected':''}>Evaluaciones del ${d}</option>`).join('')}
+          </select>
+        </div>
+      </div>`;
+
+    if(allScores.length===0){
+      html += `<div class="empty"><div class="big">📊</div>No hay evaluaciones para esta selección.</div>`;
+      document.getElementById('app').innerHTML = html;
+      return;
+    }
+
+    html += `<div class="card"><h3 style="margin-bottom:14px;">Resumen general del equipo</h3>`;
+    html += this.buildBarChart(allScores);
+    html += `</div>`;
+
+    const byCategory = {};
+    allScores.forEach(s=>{
+      const catName = s.criteria && s.criteria.categories ? s.criteria.categories.name : 'General';
+      if(!byCategory[catName]) byCategory[catName] = [];
+      byCategory[catName].push(s);
+    });
+    Object.keys(byCategory).forEach(catName=>{
+      html += `<div class="card"><h3 style="margin-bottom:14px;">${catName}</h3>`;
+      html += this.buildBarChart(byCategory[catName]);
+      html += `</div>`;
+    });
+
+    document.getElementById('app').innerHTML = html;
+  },
+
+  // ---------- STATS ----------
+  async renderStats(){
+    const subj = this.currentSubject;
+    const col = subj.type==='player' ? 'player_id' : 'coach_id';
+    const { data: evals, error: e1 } = await client.from('evaluations')
+      .select('id, evaluation_date, season, category_summary:evaluation_scores(scale_level_id, criteria(category_id, categories(name)), scale_levels(label,color,sort_order))')
+      .eq(col, subj.id)
+      .order('evaluation_date', { ascending:false });
+    if(e1) throw e1;
+
+    this._statsEvals = evals || [];
+    this.statsDateFilter = 'all';
+    this.statsSeasonFilter = 'all';
+    this.renderStatsBody();
+  },
+
+  onStatsDateChange(value){
+    this.statsDateFilter = value;
+    this.renderStatsBody();
+  },
+
+  onStatsSeasonChange(value){
+    this.statsSeasonFilter = value;
+    this.renderStatsBody();
+  },
+
+  renderStatsBody(){
+    const subj = this.currentSubject;
+    const evals = this._statsEvals || [];
+    const dateFilter = this.statsDateFilter || 'all';
+    const seasonFilter = this.statsSeasonFilter || 'all';
+    const filteredEvals = evals
+      .filter(ev=> dateFilter==='all' || ev.evaluation_date===dateFilter)
+      .filter(ev=> seasonFilter==='all' || ev.season===seasonFilter);
+
+    const allScores = [];
+    filteredEvals.forEach(ev=>{
+      (ev.category_summary||[]).forEach(s=> allScores.push(s));
+    });
+
+    // unique dates/seasons for the dropdowns, most recent first
+    const uniqueDates = [...new Set(evals.map(ev=>ev.evaluation_date))];
+    const uniqueSeasons = [...new Set(evals.map(ev=>ev.season))];
+
+    let html = `<div class="crumb" onclick='App.goSubject(${JSON.stringify(subj)})'>← ${subj.full_name}</div>
+      <h2>Estadísticas</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 14px;">${subj.full_name} · ${evals.length} evaluación(es) registradas</p>
+      <div class="row" style="margin-bottom:18px;">
+        <div style="max-width:220px;">
+          <label style="margin-top:0;">Temporada</label>
+          <select onchange="App.onStatsSeasonChange(this.value)">
+            <option value="all" ${seasonFilter==='all'?'selected':''}>Todas las temporadas</option>
+            ${uniqueSeasons.map(s=>`<option value="${s}" ${seasonFilter===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div style="max-width:260px;">
+          <label style="margin-top:0;">Fecha</label>
+          <select onchange="App.onStatsDateChange(this.value)">
+            <option value="all" ${dateFilter==='all'?'selected':''}>Todas las evaluaciones (acumulado)</option>
+            ${uniqueDates.map(d=>`<option value="${d}" ${dateFilter===d?'selected':''}>Evaluación del ${d}</option>`).join('')}
+          </select>
+        </div>
+      </div>`;
+
+    if(allScores.length===0){
+      html += `<div class="empty"><div class="big">📊</div>No hay puntuaciones para esta selección.</div>`;
+      document.getElementById('app').innerHTML = html;
+      return;
+    }
+
+    // ---- Evolution over time (always uses the FULL history, ignores filters above) ----
+    const trendHtml = this.buildTrendChart(evals);
+    if(trendHtml){
+      html += `<div class="card">
+        <h3 style="margin-bottom:4px;">Evolución en el tiempo</h3>
+        <p style="color:var(--muted);font-size:.76rem;margin:0 0 14px;">Media general por evaluación · siempre muestra todo el histórico, independientemente de los filtros de arriba</p>
+        ${trendHtml}
+      </div>`;
+    }
+
+    // ---- Overall distribution (all categories combined) ----
+    html += `<div class="card"><h3 style="margin-bottom:14px;">Resumen general</h3>`;
+    html += this.buildBarChart(allScores);
+    html += `</div>`;
+
+    // ---- Distribution per category ----
+    const byCategory = {};
+    allScores.forEach(s=>{
+      const catName = s.criteria && s.criteria.categories ? s.criteria.categories.name : 'General';
+      if(!byCategory[catName]) byCategory[catName] = [];
+      byCategory[catName].push(s);
+    });
+    Object.keys(byCategory).forEach(catName=>{
+      html += `<div class="card"><h3 style="margin-bottom:14px;">${catName}</h3>`;
+      html += this.buildBarChart(byCategory[catName]);
+      html += `</div>`;
+    });
+
+    document.getElementById('app').innerHTML = html;
+  },
+
+  // Builds a simple SVG line chart showing the average score per evaluation
+  // date, so you can see how a player evolves over time. Uses a fixed 1-4
+  // scale matching the app's standard levels (excludes "No observado").
+  buildTrendChart(evals){
+    const LEVEL_LABELS = { 4:'Excelente', 3:'Consolidado', 2:'En Desarrollo', 1:'Necesita apoyo' };
+    const sorted = [...evals].sort((a,b)=> new Date(a.evaluation_date) - new Date(b.evaluation_date));
+    const points = [];
+    sorted.forEach(ev=>{
+      const rated = (ev.category_summary||[]).filter(s=> s.scale_levels && s.scale_levels.label !== 'No observado' && s.scale_levels.sort_order!=null);
+      if(rated.length===0) return;
+      const avg = rated.reduce((sum,s)=> sum + (5 - s.scale_levels.sort_order), 0) / rated.length;
+      points.push({ date: ev.evaluation_date, avg });
+    });
+    if(points.length < 2) return null; // not meaningful with a single point
+
+    const W = Math.max(360, points.length * 70);
+    const H = 150, padL = 90, padR = 16, padT = 14, padB = 10;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const minV = 1, maxV = 4;
+    const x = i => padL + (points.length>1 ? (i/(points.length-1))*plotW : plotW/2);
+    const y = v => padT + plotH - ((v-minV)/(maxV-minV))*plotH;
+
+    let svg = `<div style="overflow-x:auto;"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:none;">`;
+    // horizontal grid lines + level labels
+    for(let lvl=1; lvl<=4; lvl++){
+      const gy = y(lvl);
+      svg += `<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="#e4ded0" stroke-width="1"/>`;
+      svg += `<text x="${padL-8}" y="${gy+3}" text-anchor="end" font-size="9" fill="#6b7a78">${LEVEL_LABELS[lvl]}</text>`;
+    }
+    // line
+    const linePoints = points.map((p,i)=> `${x(i)},${y(p.avg)}`).join(' ');
+    svg += `<polyline points="${linePoints}" fill="none" stroke="#0f4c5c" stroke-width="2.5"/>`;
+    // dots (no date labels, per user preference)
+    points.forEach((p,i)=>{
+      svg += `<circle cx="${x(i)}" cy="${y(p.avg)}" r="4.5" fill="#0f4c5c"/>`;
+    });
+    svg += `</svg></div>`;
+    return svg;
+  },
+
+  // Builds a simple horizontal bar chart (pure CSS) counting how many
+  // scores fall into each scale level, ordered by the scale's sort_order.
+  buildBarChart(scores){
+    const counts = {}; // label -> {count, color, order}
+    scores.forEach(s=>{
+      const sl = s.scale_levels;
+      const label = sl ? sl.label : 'No observado';
+      const color = sl ? sl.color : '#9ca3af';
+      const order = sl ? sl.sort_order : 99;
+      if(!counts[label]) counts[label] = { count:0, color, order };
+      counts[label].count++;
+    });
+    const rows = Object.keys(counts).map(label=>({ label, ...counts[label] }))
+      .sort((a,b)=>a.order-b.order);
+    const total = rows.reduce((sum,r)=>sum+r.count, 0) || 1;
+
+    let html = '<div class="bar-chart">';
+    rows.forEach(r=>{
+      const pct = Math.round((r.count/total)*100);
+      html += `<div class="bar-row">
+        <div class="bar-label">${r.label}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${r.color};"></div></div>
+        <div class="bar-count">${pct}% <span class="bar-count-sub">(${r.count})</span></div>
+      </div>`;
+    });
+    html += '</div>';
+    return html;
+  },
+
   async startNewEvaluation(){
+    if(!this.requireAdmin()) return;
     const subjectType = this.currentSubject.type;
     const { data: template, error } = await client.from('evaluation_templates')
       .select('*').eq('subject_type', subjectType).limit(1).single();
     if(error) return alert('No se encontró una plantilla de evaluación para este tipo. Revisa la tabla evaluation_templates en Supabase.');
     this.currentTemplate = template;
     this.scaleSelections = {};
+    this._editingEvaluationId = null;
+    this._editingEvaluationRow = null;
     this.view = 'newEvaluation';
     this.render();
   },
+
+  async editEvaluation(evaluationId){
+    if(!this.requireAdmin()) return;
+    const { data: ev, error: e1 } = await client.from('evaluations').select('*').eq('id', evaluationId).single();
+    if(e1) return alert('Error: '+e1.message);
+    const { data: template, error: e2 } = await client.from('evaluation_templates').select('*').eq('id', ev.template_id).single();
+    if(e2) return alert('Error: '+e2.message);
+    this.currentTemplate = template;
+    this.scaleSelections = {};
+    this._editingEvaluationId = evaluationId;
+    this._editingEvaluationRow = ev;
+    this.view = 'newEvaluation';
+    this.render();
+  },
+
+  SEMAFORO_OPTIONS: [
+    { value:'verde', label:'Señales positivas', color:'#22c55e', desc:'Habla de jugadores, objetivos concretos, autocrítica, comparte información.' },
+    { value:'amarillo', label:'Puntos de atención', color:'#f59e0b', desc:'Enfoque excesivo en sistemas/ganar, dificultad metodológica, poca autocrítica.' },
+    { value:'rojo', label:'Alarma (descarte)', color:'#ef4444', desc:'Humillación, gritos sistemáticos, culpa a árbitros, no acepta supervisión.' },
+  ],
 
   async renderEvaluationForm(){
     const template = this.currentTemplate;
@@ -416,66 +1313,131 @@ const App = {
       .select('*').eq('template_id', template.id).order('sort_order');
     if(e3) throw e3;
 
+    const coachMode = !scaleLevels || scaleLevels.length===0;
+    const isEditing = !!this._editingEvaluationId;
+
+    let existingScoresByCriterion = {};
+    if(isEditing){
+      const { data: existingScores, error: e4 } = await client.from('evaluation_scores')
+        .select('*').eq('evaluation_id', this._editingEvaluationId);
+      if(e4) throw e4;
+      (existingScores||[]).forEach(s=> existingScoresByCriterion[s.criterion_id] = s);
+    }
+    this._formExistingScores = existingScoresByCriterion;
+
     this._formCategories = categories;
     this._formCriteria = criteria;
     this._formScaleLevels = scaleLevels;
+    this._coachMode = coachMode;
+    this.selectedSemaforo = isEditing ? (this._editingEvaluationRow.semaforo || null) : null;
 
-    let html = `<div class="crumb" onclick='App.goSubject(${JSON.stringify(this.currentSubject)})'>← ${this.currentSubject.full_name}</div>
-      <h2>${template.name}</h2>
-      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${this.currentSubject.full_name} · ${this.currentTeam.season}</p>`;
+    const editBadge = isEditing ? ` <span class="pill" style="background:#fde68a;color:#92400e;">Editando evaluación del ${this._editingEvaluationRow.evaluation_date}</span>` : '';
+    let html = `<div class="crumb" onclick='${isEditing ? `App.openReport('${this._editingEvaluationId}')` : `App.goSubject(${JSON.stringify(this.currentSubject)})`}'>← ${isEditing ? 'Volver al informe' : this.currentSubject.full_name}</div>
+      <h2>${template.name}${editBadge}</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">${this.currentSubject.full_name} · ${isEditing ? this._editingEvaluationRow.season : this.currentTeam.season}</p>`;
 
-    categories.forEach((cat,idx)=>{
-      const critsInCat = criteria.filter(c=>c.category_id===cat.id);
-      const openClass = idx===0 ? ' open' : '';
-      html += `<div class="category-block${openClass}" id="cat-${cat.id}">
-        <div class="category-header" onclick="App.toggleCategory('${cat.id}')">
-          <h3>${cat.name}<span class="count">${critsInCat.length} criterios</span></h3>
+    if(coachMode){
+      // ---- Numeric scoring mode (e.g. coach rubric) ----
+      categories.forEach((cat,idx)=>{
+        const critsInCat = criteria.filter(c=>c.category_id===cat.id);
+        const openClass = idx===0 ? ' open' : '';
+        html += `<div class="category-block${openClass}" id="cat-${cat.id}">
+          <div class="category-header" onclick="App.toggleCategory('${cat.id}')">
+            <h3>${cat.name}</h3>
+            <span class="chev">▾</span>
+          </div>
+          <div class="category-body" style="display:block;grid-template-columns:none;">`;
+        critsInCat.forEach(crit=>{
+          const max = crit.max_score != null ? crit.max_score : 10;
+          const existing = existingScoresByCriterion[crit.id];
+          const existingVal = existing && existing.numeric_score!=null ? existing.numeric_score : '';
+          const existingObs = existing && existing.observation ? existing.observation : '';
+          html += `<div class="criterion" style="margin-bottom:10px;">
+            ${crit.help_text ? `<div class="info-box show" style="margin-bottom:8px;">${crit.help_text}</div>` : ''}
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="number" min="0" max="${max}" step="1" id="score-${crit.id}"
+                style="width:80px;text-align:center;font-weight:700;" placeholder="0" value="${existingVal}">
+              <span style="color:var(--muted);font-size:.85rem;">/ ${max} puntos</span>
+            </div>
+            <div class="obs-field"><textarea placeholder="Observación (opcional)" id="obs-${crit.id}">${existingObs}</textarea></div>
+          </div>`;
+        });
+        html += `</div></div>`;
+      });
+
+      // ---- Semáforo ----
+      html += `<div class="category-block open" id="cat-semaforo">
+        <div class="category-header" onclick="App.toggleCategory('semaforo')">
+          <h3>Control rápido de Dirección Deportiva</h3>
           <span class="chev">▾</span>
         </div>
-        <div class="category-body">`;
-      critsInCat.forEach(crit=>{
-        html += `<div class="criterion">
-          <div class="criterion-head">
-            <span class="cname">${crit.name}</span>
-            ${crit.help_text ? `<button class="info-btn" onclick="event.stopPropagation(); App.toggleInfo('info-${crit.id}')">i</button>` : ''}
-          </div>`;
-        if(crit.help_text){
-          html += `<div class="info-box" id="info-${crit.id}">${crit.help_text}</div>`;
-        }
-        html += `<div class="scale-row">`;
-        scaleLevels.forEach(sl=>{
-          html += `<label class="scale-opt">
-            <input type="radio" name="scale-${crit.id}" value="${sl.id}" onchange="App.scaleSelections['${crit.id}']='${sl.id}'">
-            <span class="scale-dot" style="border-color:${sl.color};" onclick="this.previousElementSibling.checked=true; this.style.background='${sl.color}';"></span>
-            <span class="scale-label">${sl.label}</span>
-          </label>`;
-        });
-        html += `</div>
-          <div class="obs-field"><textarea placeholder="Observación (opcional)" id="obs-${crit.id}"></textarea></div>
-        </div>`;
+        <div class="category-body" style="display:block;grid-template-columns:none;">`;
+      this.SEMAFORO_OPTIONS.forEach(opt=>{
+        html += `<label class="semaforo-opt" id="semaforo-opt-${opt.value}" onclick="App.selectSemaforo('${opt.value}')">
+          <span class="semaforo-dot" style="background:${opt.color};"></span>
+          <span><strong>${opt.label}</strong><br><span style="color:var(--muted);font-size:.78rem;">${opt.desc}</span></span>
+        </label>`;
       });
       html += `</div></div>`;
-    });
+    } else {
+      // ---- Colored-scale mode (players) ----
+      categories.forEach((cat,idx)=>{
+        const critsInCat = criteria.filter(c=>c.category_id===cat.id);
+        const openClass = idx===0 ? ' open' : '';
+        html += `<div class="category-block${openClass}" id="cat-${cat.id}">
+          <div class="category-header" onclick="App.toggleCategory('${cat.id}')">
+            <h3>${cat.name}<span class="count">${critsInCat.length} criterios</span></h3>
+            <span class="chev">▾</span>
+          </div>
+          <div class="category-body">`;
+        critsInCat.forEach(crit=>{
+          html += `<div class="criterion">
+            <div class="criterion-head">
+              <span class="cname">${crit.name}</span>
+              ${crit.help_text ? `<button class="info-btn" onclick="event.stopPropagation(); App.toggleInfo('info-${crit.id}')">i</button>` : ''}
+            </div>`;
+          if(crit.help_text){
+            html += `<div class="info-box" id="info-${crit.id}">${crit.help_text}</div>`;
+          }
+          html += `<div class="scale-row" id="scalerow-${crit.id}">`;
+          const existing = existingScoresByCriterion[crit.id];
+          const existingObs = existing && existing.observation ? existing.observation : '';
+          scaleLevels.forEach(sl=>{
+            const isChecked = existing && existing.scale_level_id === sl.id;
+            html += `<label class="scale-opt">
+              <input type="radio" name="scale-${crit.id}" value="${sl.id}" style="display:none;" ${isChecked ? 'checked' : ''}>
+              <span class="scale-dot" style="border-color:${sl.color};" onclick="App.toggleScaleDot(this,'${crit.id}','${sl.id}','${sl.color}')"></span>
+              <span class="scale-label">${sl.label}</span>
+            </label>`;
+          });
+          html += `</div>
+            <div class="obs-field"><textarea placeholder="Observación (opcional)" id="obs-${crit.id}">${existingObs}</textarea></div>
+          </div>`;
+        });
+        html += `</div></div>`;
+      });
 
-    html += `<div class="personal-block">
-      <h3>Desarrollo personal</h3>
-      <div class="personal-field">
-        <label>Entrenabilidad</label>
-        <textarea id="pf-entrenabilidad" placeholder="Cómo responde a las correcciones y al aprendizaje..."></textarea>
-      </div>
-      <div class="personal-field">
-        <label>Fortalezas</label>
-        <textarea id="pf-fortalezas" placeholder="Puntos fuertes destacados..."></textarea>
-      </div>
-      <div class="personal-field">
-        <label>Objetivos de mejora</label>
-        <textarea id="pf-objetivos_mejora" placeholder="En qué debe centrarse de cara a la siguiente evaluación..."></textarea>
-      </div>
-      <div class="personal-field">
-        <label>Observaciones del entrenador</label>
-        <textarea id="pf-observaciones_entrenador" placeholder="Cualquier otro comentario relevante..."></textarea>
-      </div>
-    </div>`;
+      const pf = isEditing ? this._editingEvaluationRow : {};
+      html += `<div class="personal-block">
+        <h3>Desarrollo personal</h3>
+        <div class="personal-field">
+          <label>Entrenabilidad</label>
+          <textarea id="pf-entrenabilidad" placeholder="Cómo responde a las correcciones y al aprendizaje...">${pf.entrenabilidad||''}</textarea>
+        </div>
+        <div class="personal-field">
+          <label>Fortalezas</label>
+          <textarea id="pf-fortalezas" placeholder="Puntos fuertes destacados...">${pf.fortalezas||''}</textarea>
+        </div>
+        <div class="personal-field">
+          <label>Objetivos de mejora</label>
+          <textarea id="pf-objetivos_mejora" placeholder="En qué debe centrarse de cara a la siguiente evaluación...">${pf.objetivos_mejora||''}</textarea>
+        </div>
+        <div class="personal-field">
+          <label>Observaciones del entrenador</label>
+          <textarea id="pf-observaciones_entrenador" placeholder="Cualquier otro comentario relevante...">${pf.observaciones_entrenador||''}</textarea>
+        </div>
+      </div>`;
+    }
 
     html += `<div class="row" style="margin-top:20px;">
       <button class="btn btn-outline" onclick="App.saveEvaluation('draft')" style="flex:1;">Guardar borrador</button>
@@ -484,13 +1446,41 @@ const App = {
 
     document.getElementById('app').innerHTML = html;
 
-    // paint pre-selected dots correctly (in case of re-render)
+    // paint pre-selected dots correctly (in case of re-render or editing)
     document.querySelectorAll('.scale-opt input').forEach(inp=>{
       if(inp.checked){
         const sl = scaleLevels.find(s=>s.id===inp.value);
         inp.nextElementSibling.style.background = sl.color;
+        this.scaleSelections[inp.name.replace('scale-','')] = inp.value;
       }
     });
+    if(this.selectedSemaforo) this.selectSemaforo(this.selectedSemaforo);
+  },
+
+  selectSemaforo(value){
+    this.selectedSemaforo = value;
+    this.SEMAFORO_OPTIONS.forEach(opt=>{
+      const el = document.getElementById('semaforo-opt-'+opt.value);
+      if(el) el.classList.toggle('selected', opt.value===value);
+    });
+  },
+
+  toggleScaleDot(dotEl, critId, slId, color){
+    const input = dotEl.previousElementSibling;
+    const row = document.getElementById('scalerow-'+critId);
+    const allDots = row.querySelectorAll('.scale-dot');
+
+    if(input.checked){
+      // already selected -> unmark
+      input.checked = false;
+      delete this.scaleSelections[critId];
+      allDots.forEach(d=> d.style.background = '');
+    } else {
+      input.checked = true;
+      this.scaleSelections[critId] = slId;
+      allDots.forEach(d=> d.style.background = '');
+      dotEl.style.background = color;
+    }
   },
 
   toggleCategory(id){
@@ -502,40 +1492,80 @@ const App = {
   },
 
   async saveEvaluation(status){
+    if(!this.requireAdmin()) return;
     const subj = this.currentSubject;
     const template = this.currentTemplate;
+    const coachMode = this._coachMode;
+    const isEditing = !!this._editingEvaluationId;
+
     const payload = {
       template_id: template.id,
       subject_type: subj.type,
-      season: this.currentTeam.season,
+      season: isEditing ? this._editingEvaluationRow.season : this.currentTeam.season,
       status: status,
-      entrenabilidad: document.getElementById('pf-entrenabilidad').value || null,
-      fortalezas: document.getElementById('pf-fortalezas').value || null,
-      objetivos_mejora: document.getElementById('pf-objetivos_mejora').value || null,
-      observaciones_entrenador: document.getElementById('pf-observaciones_entrenador').value || null
     };
-    payload[subj.type==='player' ? 'player_id' : 'coach_id'] = subj.id;
+    if(!isEditing){
+      payload[subj.type==='player' ? 'player_id' : 'coach_id'] = subj.id;
+      payload.evaluated_by_email = this.user.email;
+    }
 
-    const { data: evalRow, error: e1 } = await client.from('evaluations').insert(payload).select().single();
-    if(e1) return alert('Error al guardar la evaluación: '+e1.message);
+    if(coachMode){
+      payload.semaforo = this.selectedSemaforo || null;
+    } else {
+      payload.entrenabilidad = document.getElementById('pf-entrenabilidad').value || null;
+      payload.fortalezas = document.getElementById('pf-fortalezas').value || null;
+      payload.objetivos_mejora = document.getElementById('pf-objetivos_mejora').value || null;
+      payload.observaciones_entrenador = document.getElementById('pf-observaciones_entrenador').value || null;
+    }
+
+    let evalRow;
+    if(isEditing){
+      const { data, error } = await client.from('evaluations').update(payload).eq('id', this._editingEvaluationId).select().single();
+      if(error) return alert('Error al actualizar la evaluación: '+error.message);
+      evalRow = data;
+      const { error: delErr } = await client.from('evaluation_scores').delete().eq('evaluation_id', evalRow.id);
+      if(delErr) return alert('Error al actualizar las puntuaciones: '+delErr.message);
+    } else {
+      const { data, error } = await client.from('evaluations').insert(payload).select().single();
+      if(error) return alert('Error al guardar la evaluación: '+error.message);
+      evalRow = data;
+    }
 
     const scores = [];
     this._formCriteria.forEach(crit=>{
-      const selectedInput = document.querySelector(`input[name="scale-${crit.id}"]:checked`);
       const obs = document.getElementById(`obs-${crit.id}`).value || null;
-      if(selectedInput || obs){
-        scores.push({
-          evaluation_id: evalRow.id,
-          criterion_id: crit.id,
-          scale_level_id: selectedInput ? selectedInput.value : null,
-          observation: obs
-        });
+      if(coachMode){
+        const scoreInput = document.getElementById(`score-${crit.id}`);
+        const raw = scoreInput ? scoreInput.value : '';
+        const val = raw !== '' ? parseInt(raw, 10) : null;
+        const max = crit.max_score != null ? crit.max_score : null;
+        const clamped = (val!=null && !isNaN(val)) ? Math.max(0, max!=null ? Math.min(val, max) : val) : null;
+        if(clamped!=null || obs){
+          scores.push({
+            evaluation_id: evalRow.id,
+            criterion_id: crit.id,
+            numeric_score: clamped,
+            observation: obs
+          });
+        }
+      } else {
+        const selectedInput = document.querySelector(`input[name="scale-${crit.id}"]:checked`);
+        if(selectedInput || obs){
+          scores.push({
+            evaluation_id: evalRow.id,
+            criterion_id: crit.id,
+            scale_level_id: selectedInput ? selectedInput.value : null,
+            observation: obs
+          });
+        }
       }
     });
     if(scores.length){
       const { error: e2 } = await client.from('evaluation_scores').insert(scores);
-      if(e2) return alert('La evaluación se creó pero hubo un error guardando las puntuaciones: '+e2.message);
+      if(e2) return alert('La evaluación se guardó pero hubo un error guardando las puntuaciones: '+e2.message);
     }
+    this._editingEvaluationId = null;
+    this._editingEvaluationRow = null;
     this.currentEvaluationId = evalRow.id;
     this.view = 'report';
     this.render();
@@ -552,9 +1582,11 @@ const App = {
     const { data: ev, error: e1 } = await client.from('evaluations').select('*').eq('id', this.currentEvaluationId).single();
     if(e1) throw e1;
     const { data: scores, error: e2 } = await client.from('evaluation_scores')
-      .select('*, criteria(name, help_text, category_id, categories(name, sort_order)), scale_levels(label, color)')
+      .select('*, criteria(name, help_text, category_id, max_score, categories(name, sort_order)), scale_levels(label, color)')
       .eq('evaluation_id', ev.id);
     if(e2) throw e2;
+
+    const coachMode = ev.subject_type === 'coach';
 
     // group by category
     const byCategory = {};
@@ -568,22 +1600,64 @@ const App = {
       ? '<span class="status-tag status-final">Cerrada</span>'
       : '<span class="status-tag status-draft">Borrador</span>';
 
+    const subj = this.currentSubject;
+    const avatarHtml = subj.type==='player'
+      ? (subj.photo_url
+          ? `<img src="${subj.photo_url}" class="avatar avatar-lg">`
+          : `<div class="avatar avatar-lg">${this.initials(subj.full_name)}</div>`)
+      : '';
+
     let html = `<div class="crumb no-print" onclick='App.goSubject(${JSON.stringify(this.currentSubject)})'>← ${this.currentSubject.full_name}</div>
-      <div class="toolbar no-print"><button class="btn btn-outline" onclick="window.print()">Imprimir o guardar en PDF</button></div>
-      <h2>${this.currentSubject.full_name}</h2>
-      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 16px;">
-        Evaluación del ${ev.evaluation_date} · Temporada ${ev.season} &nbsp; ${statusHtml}
-      </p>`;
+      <div class="toolbar no-print">
+        ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.editEvaluation('${ev.id}')">✏️ Editar evaluación</button>` : ''}
+        <button class="btn btn-outline" onclick="window.print()">Imprimir o guardar en PDF</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px;">
+        ${avatarHtml}
+        <div><h2>${this.currentSubject.full_name}</h2>
+        <p style="color:var(--muted);font-size:.85rem;margin:2px 0 0;">
+          Evaluación del ${ev.evaluation_date} · Temporada ${ev.season} &nbsp; ${statusHtml}
+        </p>
+        ${ev.evaluated_by_email ? `<p style="color:var(--muted);font-size:.76rem;margin:2px 0 0;">Evaluado por ${ev.evaluated_by_email}</p>` : ''}
+        </div>
+      </div>
+      <div style="margin-bottom:16px;"></div>`;
+
+    if(coachMode){
+      const total = scores.reduce((sum,s)=> sum + (s.numeric_score!=null ? s.numeric_score : 0), 0);
+      const maxTotal = scores.reduce((sum,s)=> sum + (s.criteria && s.criteria.max_score!=null ? s.criteria.max_score : 0), 0);
+      html += `<div class="card" style="text-align:center;">
+        <div style="font-size:.8rem;color:var(--muted);font-weight:600;">PUNTUACIÓN TOTAL</div>
+        <div style="font-size:2rem;font-weight:800;color:var(--teal-dark);">${total} <span style="font-size:1.1rem;color:var(--muted);font-weight:600;">/ ${maxTotal||100}</span></div>
+      </div>`;
+      if(ev.semaforo){
+        const opt = this.SEMAFORO_OPTIONS.find(o=>o.value===ev.semaforo);
+        if(opt){
+          html += `<div class="card" style="display:flex;align-items:center;gap:12px;">
+            <span class="semaforo-dot" style="background:${opt.color};width:20px;height:20px;"></span>
+            <div><strong>${opt.label}</strong><div style="color:var(--muted);font-size:.8rem;">${opt.desc}</div></div>
+          </div>`;
+        }
+      }
+    }
 
     Object.keys(byCategory).forEach(catName=>{
       html += `<div class="card"><h3 style="margin-bottom:10px;">${catName}</h3>`;
       byCategory[catName].forEach(s=>{
-        const label = s.scale_levels ? s.scale_levels.label : 'No observado';
-        const color = s.scale_levels ? s.scale_levels.color : '#9ca3af';
-        html += `<div class="report-score">
-          <div><span class="badge-dot" style="background:${color};"></span>${s.criteria.name}</div>
-          <div style="font-weight:600;font-size:.85rem;">${label}</div>
-        </div>`;
+        if(coachMode){
+          const max = s.criteria && s.criteria.max_score!=null ? s.criteria.max_score : null;
+          html += `<div class="report-score">
+            <div>${s.criteria.name}</div>
+            <div style="font-weight:700;font-size:.9rem;">${s.numeric_score!=null ? s.numeric_score : '—'}${max!=null ? ` / ${max}` : ''}</div>
+          </div>`;
+        } else {
+          const label = s.scale_levels ? s.scale_levels.label : 'No observado';
+          const color = s.scale_levels ? s.scale_levels.color : '#9ca3af';
+          html += `<div class="report-score">
+            <div><span class="badge-dot" style="background:${color};"></span>${s.criteria.name}</div>
+            <div style="font-weight:600;font-size:.85rem;">${label}</div>
+          </div>`;
+        }
         if(s.observation){
           html += `<div style="font-size:.8rem;color:var(--muted);margin:-4px 0 8px 22px;">${s.observation}</div>`;
         }
@@ -616,6 +1690,12 @@ const App = {
 };
 
 App.init();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('SW no registrado:', err));
+  });
+}
 </script>
 </body>
 </html>
