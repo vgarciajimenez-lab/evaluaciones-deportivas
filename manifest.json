@@ -1,6 +1,6 @@
 {
-  "name": "Evaluación Deportiva - Cieza E.B.",
-  "short_name": "Cieza E.B.",
+  "name": "CanteraPro - Cieza E.B.",
+  "short_name": "CanteraPro",
   "description": "Sistema de evaluación de jugadores y entrenadores",
   "start_url": "./",
   "scope": "./",
