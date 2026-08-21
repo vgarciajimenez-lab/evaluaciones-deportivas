@@ -46,6 +46,7 @@
   }
   .topbar .brand{font-family:'Sora',sans-serif;font-weight:800;font-size:1.15rem;letter-spacing:.2px;}
   .topbar .brand span{opacity:.65;font-weight:600;font-size:.85rem;display:block;margin-top:2px;}
+  #roleTag{margin-top:6px;padding:2px 9px;border-radius:100px;background:rgba(250,204,21,.18);color:#facc15;font-size:.7rem;font-weight:700;}
   .topbar button{background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;padding:8px 14px;border-radius:100px;font-size:.85rem;cursor:pointer;}
   .topbar button:hover{background:rgba(255,255,255,.12);}
   .nav{display:flex;gap:8px;margin-bottom:24px;}
@@ -183,7 +184,7 @@
 </head>
 <body>
 <div class="topbar no-print" id="topbar" style="display:none;">
-  <div class="brand">CanteraPro<span id="userEmail"></span></div>
+  <div class="brand">CanteraPro<span id="userEmail"></span><span id="roleTag"></span></div>
   <button onclick="App.logout()">Cerrar sesión</button>
 </div>
 <div id="app"></div>
@@ -206,6 +207,7 @@ const App = {
     const { data:{ session } } = await client.auth.getSession();
     if(session){
       this.user = session.user;
+      await this.loadUserRole();
       document.getElementById('topbar').style.display='flex';
       document.getElementById('userEmail').textContent = session.user.email;
       this.view = 'teams';
@@ -213,9 +215,33 @@ const App = {
     this.render();
   },
 
+  async loadUserRole(){
+    try{
+      const { data, error } = await client.from('profiles').select('role').eq('id', this.user.id).single();
+      this.userRole = (!error && data) ? data.role : 'viewer';
+    }catch(e){
+      this.userRole = 'viewer'; // por seguridad, si algo falla, mejor asumir el rol más restrictivo
+    }
+    const tag = document.getElementById('roleTag');
+    if(tag) tag.textContent = this.userRole==='viewer' ? 'Solo lectura' : '';
+  },
+
+  isAdmin(){
+    return this.userRole === 'admin';
+  },
+
+  requireAdmin(){
+    if(!this.isAdmin()){
+      alert('Tu cuenta es de solo lectura. No puedes crear, editar ni borrar datos.');
+      return false;
+    }
+    return true;
+  },
+
   async logout(){
     await client.auth.signOut();
     this.user = null;
+    this.userRole = null;
     document.getElementById('topbar').style.display='none';
     this.view = 'login';
     this.render();
@@ -232,6 +258,7 @@ const App = {
       return;
     }
     this.user = data.user;
+    await this.loadUserRole();
     document.getElementById('topbar').style.display='flex';
     document.getElementById('userEmail').textContent = data.user.email;
     this.view = 'teams';
@@ -291,7 +318,7 @@ const App = {
     let html = `<div class="section-title"><h2>Equipos</h2>
       <div class="row">
         ${teams && teams.length>1 ? `<button class="btn btn-outline" onclick="App.goClubStats()">📊 Estadísticas del club</button>` : ''}
-        <button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button>
+        ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button>` : ''}
       </div></div>`;
     if(!teams || teams.length===0){
       html += `<div class="empty"><div class="big">🏟️</div>Todavía no hay equipos.<br>Crea el primero para empezar.</div>`;
@@ -306,6 +333,7 @@ const App = {
   },
 
   async editTeam(){
+    if(!this.requireAdmin()) return;
     const team = this.currentTeam;
     const name = prompt('Nombre del equipo:', team.name);
     if(!name) return;
@@ -318,6 +346,7 @@ const App = {
   },
 
   async deleteTeam(){
+    if(!this.requireAdmin()) return;
     const team = this.currentTeam;
     const typed = prompt(
       `Esta acción eliminará el equipo "${team.name}" y TODOS sus jugadores, entrenadores y evaluaciones. No se puede deshacer.\n\nEscribe el nombre exacto del equipo para confirmar:`
@@ -477,6 +506,7 @@ const App = {
   },
 
   async promptNewTeam(){
+    if(!this.requireAdmin()) return;
     const name = prompt('Nombre del equipo:');
     if(!name) return;
     const season = prompt('Temporada (ej. 2025/26):', '2025/26');
@@ -500,19 +530,21 @@ const App = {
     const coaches = (allCoaches||[]).filter(c=>c.active);
     const inactiveCoaches = (allCoaches||[]).filter(c=>!c.active);
 
+    const isAdmin = this.isAdmin();
+
     let html = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div><h2>${team.name}</h2><p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">Temporada ${team.season}</p></div>
         <div class="row">
           <button class="btn btn-outline" onclick="App.goTeamStats()">📊 Estadísticas del equipo</button>
           <button class="btn btn-outline" onclick="App.exportTeamCSV()">⬇️ Exportar CSV</button>
-          <button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>
-          <button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="App.deleteTeam()">🗑️ Eliminar equipo</button>
+          ${isAdmin ? `<button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="App.deleteTeam()">🗑️ Eliminar equipo</button>` : ''}
         </div>
       </div>`;
 
     html += `<div class="section-title"><h2>Jugadores</h2>
-      <button class="btn btn-outline" onclick="App.promptNewPerson('player')">+ Añadir jugador</button></div>`;
+      ${isAdmin ? `<button class="btn btn-outline" onclick="App.promptNewPerson('player')">+ Añadir jugador</button>` : ''}</div>`;
     if(!players || players.length===0){
       html += `<div class="empty">Sin jugadores todavía.</div>`;
     } else {
@@ -526,8 +558,8 @@ const App = {
             ${avatarHtml}
             <div><div class="name">${p.number!=null ? `#${p.number} ` : ''}${p.full_name}</div><div class="meta">${p.number!=null ? '' : 'Sin número asignado'}</div></div>
           </div>
-          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editPlayer(${JSON.stringify(p)})'>✏️</button>
-          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("players", "${p.id}", false)'>⏸️</button>
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editPlayer(${JSON.stringify(p)})'>✏️</button>` : ''}
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("players", "${p.id}", false)'>⏸️</button>` : ''}
           <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
       });
     }
@@ -542,14 +574,14 @@ const App = {
       inactivePlayers.forEach(p=>{
         html += `<div class="list-item" style="opacity:.7;">
           <div style="flex:1;"><div class="name">${p.number!=null ? `#${p.number} ` : ''}${p.full_name}</div></div>
-          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Reactivar" onclick='App.togglePersonActive("players", "${p.id}", true)'>↩️ Reactivar</button>
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Reactivar" onclick='App.togglePersonActive("players", "${p.id}", true)'>↩️ Reactivar</button>` : ''}
         </div>`;
       });
       html += `</div></div>`;
     }
 
     html += `<div class="section-title"><h2>Entrenadores</h2>
-      <button class="btn btn-outline" onclick="App.promptNewPerson('coach')">+ Añadir entrenador</button></div>`;
+      ${isAdmin ? `<button class="btn btn-outline" onclick="App.promptNewPerson('coach')">+ Añadir entrenador</button>` : ''}</div>`;
     if(!coaches || coaches.length===0){
       html += `<div class="empty">Sin entrenadores todavía.</div>`;
     } else {
@@ -558,8 +590,8 @@ const App = {
         html += `<div class="list-item">
           <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;">
             <div class="name">${c.full_name}</div></div>
-          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editCoach(${JSON.stringify(c)})'>✏️</button>
-          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("coaches", "${c.id}", false)'>⏸️</button>
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editCoach(${JSON.stringify(c)})'>✏️</button>` : ''}
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("coaches", "${c.id}", false)'>⏸️</button>` : ''}
           <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
       });
     }
@@ -574,7 +606,7 @@ const App = {
       inactiveCoaches.forEach(c=>{
         html += `<div class="list-item" style="opacity:.7;">
           <div style="flex:1;"><div class="name">${c.full_name}</div></div>
-          <button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Reactivar" onclick='App.togglePersonActive("coaches", "${c.id}", true)'>↩️ Reactivar</button>
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Reactivar" onclick='App.togglePersonActive("coaches", "${c.id}", true)'>↩️ Reactivar</button>` : ''}
         </div>`;
       });
       html += `</div></div>`;
@@ -584,6 +616,7 @@ const App = {
   },
 
   async togglePersonActive(table, id, newActive){
+    if(!this.requireAdmin()) return;
     if(!newActive){
       const ok = confirm('¿Dar de baja a este jugador/entrenador? No se borra nada, solo dejará de aparecer en la lista principal. Podrás reactivarlo cuando quieras.');
       if(!ok) return;
@@ -594,6 +627,7 @@ const App = {
   },
 
   async promptNewPerson(type){
+    if(!this.requireAdmin()) return;
     if(type==='player'){
       this.openPlayerModal(null);
       return;
@@ -616,6 +650,7 @@ const App = {
   },
 
   openPlayerModal(player){
+    if(!this.requireAdmin()) return;
     const isEdit = !!player;
     const currentPhoto = player && player.photo_url ? player.photo_url : null;
     const overlay = document.createElement('div');
@@ -704,6 +739,7 @@ const App = {
   },
 
   async editCoach(coach){
+    if(!this.requireAdmin()) return;
     const name = prompt('Nombre del entrenador:', coach.full_name);
     if(!name) return;
     const { error } = await client.from('coaches').update({ full_name: name }).eq('id', coach.id);
@@ -733,7 +769,7 @@ const App = {
       </div>
       <div class="toolbar" style="margin-top:16px;">
         ${subj.type==='player' && evals && evals.length ? `<button class="btn btn-outline" onclick="App.goStats()">📊 Estadísticas</button>` : ''}
-        <button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button>
+        ${this.isAdmin() ? `<button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button>` : ''}
       </div>`;
 
     if(!evals || evals.length===0){
@@ -1133,6 +1169,7 @@ const App = {
   },
 
   async startNewEvaluation(){
+    if(!this.requireAdmin()) return;
     const subjectType = this.currentSubject.type;
     const { data: template, error } = await client.from('evaluation_templates')
       .select('*').eq('subject_type', subjectType).limit(1).single();
@@ -1146,6 +1183,7 @@ const App = {
   },
 
   async editEvaluation(evaluationId){
+    if(!this.requireAdmin()) return;
     const { data: ev, error: e1 } = await client.from('evaluations').select('*').eq('id', evaluationId).single();
     if(e1) return alert('Error: '+e1.message);
     const { data: template, error: e2 } = await client.from('evaluation_templates').select('*').eq('id', ev.template_id).single();
@@ -1356,6 +1394,7 @@ const App = {
   },
 
   async saveEvaluation(status){
+    if(!this.requireAdmin()) return;
     const subj = this.currentSubject;
     const template = this.currentTemplate;
     const coachMode = this._coachMode;
@@ -1471,7 +1510,7 @@ const App = {
 
     let html = `<div class="crumb no-print" onclick='App.goSubject(${JSON.stringify(this.currentSubject)})'>← ${this.currentSubject.full_name}</div>
       <div class="toolbar no-print">
-        <button class="btn btn-outline" onclick="App.editEvaluation('${ev.id}')">✏️ Editar evaluación</button>
+        ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.editEvaluation('${ev.id}')">✏️ Editar evaluación</button>` : ''}
         <button class="btn btn-outline" onclick="window.print()">Imprimir o guardar en PDF</button>
       </div>
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px;">
