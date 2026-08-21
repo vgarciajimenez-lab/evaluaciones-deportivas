@@ -318,6 +318,7 @@ const App = {
     let html = `<div class="section-title"><h2>Equipos</h2>
       <div class="row">
         ${teams && teams.length>1 ? `<button class="btn btn-outline" onclick="App.goClubStats()">📊 Estadísticas del club</button>` : ''}
+        ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.exportFullBackup(this)">💾 Copia de seguridad</button>` : ''}
         ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button>` : ''}
       </div></div>`;
     if(!teams || teams.length===0){
@@ -378,6 +379,38 @@ const App = {
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
+  },
+
+  downloadJSON(filename, obj){
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  // Descarga TODO el contenido de la base de datos (menos los usuarios de
+  // Authentication, que Supabase no expone por API) en un único archivo
+  // .json. Es tu copia de seguridad: guárdala en un sitio seguro (Google
+  // Drive, tu ordenador...) de vez en cuando, sobre todo antes de hacer
+  // cambios grandes en la app.
+  async exportFullBackup(btn){
+    if(btn){ btn.disabled = true; btn.textContent = 'Generando copia...'; }
+    try{
+      const tables = ['teams','players','coaches','evaluation_templates','scale_levels',
+                       'categories','criteria','evaluations','evaluation_scores'];
+      const backup = { generated_at: new Date().toISOString(), app: 'CanteraPro' };
+      for(const t of tables){
+        const { data, error } = await client.from(t).select('*');
+        if(error){ alert(`Error exportando la tabla ${t}: ${error.message}`); if(btn){ btn.disabled=false; btn.textContent='💾 Copia de seguridad'; } return; }
+        backup[t] = data;
+      }
+      const dateStr = new Date().toISOString().slice(0,10);
+      this.downloadJSON(`backup_canterapro_${dateStr}.json`, backup);
+    } finally {
+      if(btn){ btn.disabled = false; btn.textContent = '💾 Copia de seguridad'; }
+    }
   },
 
   async exportTeamCSV(){
@@ -530,6 +563,37 @@ const App = {
     const coaches = (allCoaches||[]).filter(c=>c.active);
     const inactiveCoaches = (allCoaches||[]).filter(c=>!c.active);
 
+    // ---- Calcular hace cuánto fue la última evaluación de cada uno ----
+    const STALE_DAYS = 90;
+    const lastEvalByPerson = {};
+    const playerIds = players.map(p=>p.id);
+    const coachIds = coaches.map(c=>c.id);
+    if(playerIds.length || coachIds.length){
+      const orFilters = [];
+      if(playerIds.length) orFilters.push(`player_id.in.(${playerIds.join(',')})`);
+      if(coachIds.length) orFilters.push(`coach_id.in.(${coachIds.join(',')})`);
+      const { data: recentEvals } = await client.from('evaluations')
+        .select('player_id, coach_id, evaluation_date')
+        .or(orFilters.join(','));
+      (recentEvals||[]).forEach(ev=>{
+        const pid = ev.player_id || ev.coach_id;
+        if(!lastEvalByPerson[pid] || ev.evaluation_date > lastEvalByPerson[pid]){
+          lastEvalByPerson[pid] = ev.evaluation_date;
+        }
+      });
+    }
+    const staleBadge = (personId)=>{
+      const lastDate = lastEvalByPerson[personId];
+      const daysSince = lastDate ? Math.floor((Date.now() - new Date(lastDate)) / 86400000) : null;
+      if(daysSince===null){
+        return `<span class="pill" style="background:#fee2e2;color:#b91c1c;margin-left:8px;">Nunca evaluado</span>`;
+      }
+      if(daysSince > STALE_DAYS){
+        return `<span class="pill" style="background:#fef3c7;color:#92400e;margin-left:8px;">⚠️ Hace ${daysSince} días</span>`;
+      }
+      return '';
+    };
+
     const isAdmin = this.isAdmin();
 
     let html = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
@@ -556,7 +620,7 @@ const App = {
         html += `<div class="list-item">
           <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;display:flex;align-items:center;gap:12px;">
             ${avatarHtml}
-            <div><div class="name">${p.number!=null ? `#${p.number} ` : ''}${p.full_name}</div><div class="meta">${p.number!=null ? '' : 'Sin número asignado'}</div></div>
+            <div><div class="name">${p.number!=null ? `#${p.number} ` : ''}${p.full_name}${staleBadge(p.id)}</div><div class="meta">${p.number!=null ? '' : 'Sin número asignado'}</div></div>
           </div>
           ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editPlayer(${JSON.stringify(p)})'>✏️</button>` : ''}
           ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("players", "${p.id}", false)'>⏸️</button>` : ''}
@@ -589,7 +653,7 @@ const App = {
         const subj = {...c, type:'coach'};
         html += `<div class="list-item">
           <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;">
-            <div class="name">${c.full_name}</div></div>
+            <div class="name">${c.full_name}${staleBadge(c.id)}</div></div>
           ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editCoach(${JSON.stringify(c)})'>✏️</button>` : ''}
           ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("coaches", "${c.id}", false)'>⏸️</button>` : ''}
           <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
@@ -685,6 +749,35 @@ const App = {
     if(el) el.remove();
   },
 
+  // Reduce el tamaño de la foto antes de subirla, para no gastar de más
+  // el almacenamiento gratuito de Supabase (limitado). Redimensiona al
+  // lado más largo a un máximo y la convierte a JPEG de calidad 0.8.
+  compressImage(file, maxDim=700, quality=0.8){
+    return new Promise((resolve, reject)=>{
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = e=>{ img.src = e.target.result; };
+      reader.onerror = reject;
+      img.onload = ()=>{
+        let { width, height } = img;
+        if(width > height && width > maxDim){
+          height = Math.round(height * (maxDim/width)); width = maxDim;
+        } else if(height > maxDim){
+          width = Math.round(width * (maxDim/height)); height = maxDim;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob=>{
+          if(!blob) return reject(new Error('No se pudo procesar la imagen'));
+          resolve(new File([blob], 'photo.jpg', { type:'image/jpeg' }));
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  },
+
   previewPlayerPhoto(event){
     const file = event.target.files[0];
     if(!file) return;
@@ -709,9 +802,14 @@ const App = {
 
     let photo_url = undefined; // undefined = don't touch existing value
     if(file){
-      const ext = file.name.split('.').pop();
-      const path = `${playerId || 'new-' + Date.now()}-${Date.now()}.${ext}`;
-      const { error: uploadErr } = await client.storage.from('player-photos').upload(path, file, { upsert:true });
+      let uploadFile;
+      try{
+        uploadFile = await this.compressImage(file);
+      }catch(e){
+        uploadFile = file; // si algo falla al comprimir, sube el original
+      }
+      const path = `${playerId || 'new-' + Date.now()}-${Date.now()}.jpg`;
+      const { error: uploadErr } = await client.storage.from('player-photos').upload(path, uploadFile, { upsert:true });
       if(uploadErr){
         btn.disabled = false; btn.textContent = 'Guardar';
         alert('No se pudo subir la foto: '+uploadErr.message+'\n\n¿Has creado el bucket "player-photos" en Supabase Storage?');
@@ -1408,6 +1506,7 @@ const App = {
     };
     if(!isEditing){
       payload[subj.type==='player' ? 'player_id' : 'coach_id'] = subj.id;
+      payload.evaluated_by_email = this.user.email;
     }
 
     if(coachMode){
@@ -1518,7 +1617,9 @@ const App = {
         <div><h2>${this.currentSubject.full_name}</h2>
         <p style="color:var(--muted);font-size:.85rem;margin:2px 0 0;">
           Evaluación del ${ev.evaluation_date} · Temporada ${ev.season} &nbsp; ${statusHtml}
-        </p></div>
+        </p>
+        ${ev.evaluated_by_email ? `<p style="color:var(--muted);font-size:.76rem;margin:2px 0 0;">Evaluado por ${ev.evaluated_by_email}</p>` : ''}
+        </div>
       </div>
       <div style="margin-bottom:16px;"></div>`;
 
