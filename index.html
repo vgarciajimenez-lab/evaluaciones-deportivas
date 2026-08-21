@@ -1071,7 +1071,7 @@ const App = {
     if(points.length < 2) return null; // not meaningful with a single point
 
     const W = Math.max(360, points.length * 70);
-    const H = 170, padL = 90, padR = 16, padT = 14, padB = 30;
+    const H = 150, padL = 90, padR = 16, padT = 14, padB = 10;
     const plotW = W - padL - padR, plotH = H - padT - padB;
     const minV = 1, maxV = 4;
     const x = i => padL + (points.length>1 ? (i/(points.length-1))*plotW : plotW/2);
@@ -1087,10 +1087,9 @@ const App = {
     // line
     const linePoints = points.map((p,i)=> `${x(i)},${y(p.avg)}`).join(' ');
     svg += `<polyline points="${linePoints}" fill="none" stroke="#0f4c5c" stroke-width="2.5"/>`;
-    // dots + date labels
+    // dots (no date labels, per user preference)
     points.forEach((p,i)=>{
       svg += `<circle cx="${x(i)}" cy="${y(p.avg)}" r="4.5" fill="#0f4c5c"/>`;
-      svg += `<text x="${x(i)}" y="${H-8}" text-anchor="middle" font-size="9" fill="#6b7a78">${p.date}</text>`;
     });
     svg += `</svg></div>`;
     return svg;
