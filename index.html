@@ -850,8 +850,74 @@ const App = {
     const subj = this.currentSubject;
     const col = subj.type==='player' ? 'player_id' : 'coach_id';
     const { data: evals, error } = await client.from('evaluations')
-      .select('*').eq(col, subj.id).order('evaluation_date', { ascending:false });
+      .select('*, category_summary:evaluation_scores(scale_level_id, numeric_score, scale_levels(label,sort_order))')
+      .eq(col, subj.id).order('evaluation_date', { ascending:false });
     if(error) throw error;
+
+    this._subjectEvals = evals || [];
+    this.subjectSeasonFilter = 'all';
+    this.subjectStatusFilter = 'all';
+    this.renderSubjectBody();
+  },
+
+  onSubjectFilterChange(field, value){
+    if(field==='season') this.subjectSeasonFilter = value;
+    if(field==='status') this.subjectStatusFilter = value;
+    this.renderSubjectBody();
+  },
+
+  // Media/total de una evaluación, usado para calcular la flecha de
+  // tendencia respecto a la evaluación anterior.
+  evalAggregate(ev){
+    const scores = ev.category_summary || [];
+    if(ev.subject_type==='coach'){
+      const rated = scores.filter(s=> s.numeric_score!=null);
+      if(rated.length===0) return null;
+      return rated.reduce((sum,s)=> sum + s.numeric_score, 0);
+    }
+    const rated = scores.filter(s=> s.scale_levels && s.scale_levels.label !== 'No observado' && s.scale_levels.sort_order!=null);
+    if(rated.length===0) return null;
+    return rated.reduce((sum,s)=> sum + (5 - s.scale_levels.sort_order), 0) / rated.length;
+  },
+
+  trendBadge(current, previous){
+    if(current==null || previous==null) return '';
+    const diff = current - previous;
+    if(Math.abs(diff) < 0.05) return `<span title="Igual que la anterior" style="color:var(--muted);font-weight:700;margin-left:6px;">→</span>`;
+    if(diff > 0) return `<span title="Ha mejorado respecto a la anterior" style="color:#16a34a;font-weight:700;margin-left:6px;">↑</span>`;
+    return `<span title="Ha bajado respecto a la anterior" style="color:#dc2626;font-weight:700;margin-left:6px;">↓</span>`;
+  },
+
+  async deleteEvaluation(evaluationId, event){
+    if(event) event.stopPropagation();
+    if(!this.requireAdmin()) return;
+    const ok = confirm('¿Eliminar esta evaluación? No se puede deshacer.');
+    if(!ok) return;
+    const { error } = await client.from('evaluations').delete().eq('id', evaluationId);
+    if(error) return alert('Error: '+error.message);
+    this.renderSubject();
+  },
+
+  renderSubjectBody(){
+    const subj = this.currentSubject;
+    const allEvals = this._subjectEvals || [];
+    const seasonFilter = this.subjectSeasonFilter || 'all';
+    const statusFilter = this.subjectStatusFilter || 'all';
+
+    const uniqueSeasons = [...new Set(allEvals.map(e=>e.season))];
+    const evals = allEvals
+      .filter(e=> seasonFilter==='all' || e.season===seasonFilter)
+      .filter(e=> statusFilter==='all' || e.status===statusFilter);
+
+    // aggregate ascending (oldest first) to know each one's "previous" value
+    const ascending = [...allEvals].sort((a,b)=> new Date(a.evaluation_date) - new Date(b.evaluation_date));
+    const prevAggregateByEvalId = {};
+    let lastAgg = null;
+    ascending.forEach(ev=>{
+      prevAggregateByEvalId[ev.id] = lastAgg;
+      const agg = this.evalAggregate(ev);
+      if(agg!=null) lastAgg = agg;
+    });
 
     const avatarHtml = subj.type==='player'
       ? (subj.photo_url
@@ -866,20 +932,52 @@ const App = {
         <p style="color:var(--muted);font-size:.85rem;margin:2px 0 0;">${subj.type==='player' ? (subj.number!=null ? `Nº ${subj.number}` : 'Sin número asignado') : 'Entrenador'}</p></div>
       </div>
       <div class="toolbar" style="margin-top:16px;">
-        ${subj.type==='player' && evals && evals.length ? `<button class="btn btn-outline" onclick="App.goStats()">📊 Estadísticas</button>` : ''}
+        ${subj.type==='player' && allEvals.length ? `<button class="btn btn-outline" onclick="App.goStats()">📊 Estadísticas</button>` : ''}
         ${this.isAdmin() ? `<button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button>` : ''}
       </div>`;
 
-    if(!evals || evals.length===0){
+    if(allEvals.length===0){
       html += `<div class="empty"><div class="big">📋</div>Todavía no hay evaluaciones.</div>`;
+      document.getElementById('app').innerHTML = html;
+      return;
+    }
+
+    if(uniqueSeasons.length>1 || allEvals.length>3){
+      html += `<div class="row" style="margin-bottom:16px;">
+        <div style="max-width:220px;">
+          <label style="margin-top:0;">Temporada</label>
+          <select onchange="App.onSubjectFilterChange('season', this.value)">
+            <option value="all" ${seasonFilter==='all'?'selected':''}>Todas</option>
+            ${uniqueSeasons.map(s=>`<option value="${s}" ${seasonFilter===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div style="max-width:180px;">
+          <label style="margin-top:0;">Estado</label>
+          <select onchange="App.onSubjectFilterChange('status', this.value)">
+            <option value="all" ${statusFilter==='all'?'selected':''}>Todos</option>
+            <option value="final" ${statusFilter==='final'?'selected':''}>Cerradas</option>
+            <option value="draft" ${statusFilter==='draft'?'selected':''}>Borradores</option>
+          </select>
+        </div>
+      </div>`;
+    }
+
+    if(evals.length===0){
+      html += `<div class="empty">No hay evaluaciones para esta selección.</div>`;
     } else {
       evals.forEach(ev=>{
         const statusHtml = ev.status==='final'
           ? '<span class="status-tag status-final">Cerrada</span>'
           : '<span class="status-tag status-draft">Borrador</span>';
+        const agg = this.evalAggregate(ev);
+        const trend = this.trendBadge(agg, prevAggregateByEvalId[ev.id]);
         html += `<div class="list-item" onclick="App.openReport('${ev.id}')">
-          <div><div class="name">Evaluación ${ev.evaluation_date}</div><div class="meta">Temporada ${ev.season}</div></div>
-          <div>${statusHtml}</div></div>`;
+          <div><div class="name">Evaluación ${ev.evaluation_date}${trend}</div>
+            <div class="meta">Temporada ${ev.season}${ev.evaluated_by_email ? ` · ${ev.evaluated_by_email}` : ''}</div></div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            ${statusHtml}
+            ${this.isAdmin() ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:4px;" title="Eliminar evaluación" onclick="App.deleteEvaluation('${ev.id}', event)">🗑️</button>` : ''}
+          </div></div>`;
       });
     }
     document.getElementById('app').innerHTML = html;
