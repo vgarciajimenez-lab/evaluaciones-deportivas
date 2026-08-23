@@ -185,7 +185,10 @@
 <body>
 <div class="topbar no-print" id="topbar" style="display:none;">
   <div class="brand">CanteraPro<span id="userEmail"></span><span id="roleTag"></span></div>
-  <button onclick="App.logout()">Cerrar sesión</button>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <a href="./entrenamientos.html" style="color:#fff;opacity:.8;text-decoration:none;font-size:.82rem;border:1px solid rgba(255,255,255,.35);padding:7px 12px;border-radius:100px;">🏋️ Entrenamientos</a>
+    <button onclick="App.logout()">Cerrar sesión</button>
+  </div>
 </div>
 <div id="app"></div>
 

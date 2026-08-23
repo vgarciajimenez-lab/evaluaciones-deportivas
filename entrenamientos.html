@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CanteraPro · Entrenamientos</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#111111">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --ink:#132a2e; --teal:#0f4c5c; --teal-dark:#0a3540; --sand:#f6f3ec;
+    --card:#ffffff; --line:#e4ded0; --muted:#6b7a78; --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Inter',system-ui,sans-serif;background:var(--sand);color:var(--ink);min-height:100vh;}
+  h1,h2,h3{font-family:'Sora',sans-serif;margin:0;}
+  #app{max-width:900px;margin:0 auto;padding:24px 20px 80px;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;background:var(--teal-dark);color:#fff;}
+  .topbar .brand{font-family:'Sora',sans-serif;font-weight:800;font-size:1.15rem;}
+  .topbar .brand span{opacity:.65;font-weight:600;font-size:.85rem;display:block;margin-top:2px;}
+  .topbar a.applink{color:#fff;opacity:.8;text-decoration:none;font-size:.82rem;border:1px solid rgba(255,255,255,.35);padding:7px 12px;border-radius:100px;margin-right:8px;}
+  #roleTag{margin-top:6px;padding:2px 9px;border-radius:100px;background:rgba(250,204,21,.18);color:#facc15;font-size:.7rem;font-weight:700;}
+  .topbar-right{display:flex;align-items:center;gap:10px;}
+  .topbar button{background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;padding:8px 14px;border-radius:100px;font-size:.85rem;cursor:pointer;}
+  .nav{display:flex;gap:8px;margin-bottom:24px;}
+  .crumb{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem;margin-bottom:16px;cursor:pointer;}
+  .crumb:hover{color:var(--teal);}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:14px;}
+  .list-item{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;cursor:pointer;transition:.15s;}
+  .list-item:hover{border-color:var(--teal);}
+  .list-item .name{font-weight:600;}
+  .list-item .meta{color:var(--muted);font-size:.82rem;margin-top:2px;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:100px;font-size:.72rem;font-weight:600;background:#eef2f1;color:var(--teal-dark);}
+  .btn{padding:11px 18px;border-radius:10px;border:none;font-weight:600;cursor:pointer;font-size:.9rem;font-family:inherit;}
+  .btn-primary{background:var(--teal);color:#fff;}
+  .btn-primary:hover{background:var(--teal-dark);}
+  .btn-outline{background:transparent;border:1px solid var(--line);color:var(--ink);}
+  .btn-outline:hover{border-color:var(--teal);color:var(--teal);}
+  .btn-block{width:100%;}
+  .btn-sm{padding:6px 10px;font-size:.78rem;border-radius:8px;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;}
+  input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:.9rem;background:#fff;color:var(--ink);}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--teal);outline-offset:1px;}
+  label{display:block;font-size:.8rem;font-weight:600;color:var(--muted);margin-bottom:6px;margin-top:14px;}
+  label:first-child{margin-top:0;}
+  .login-wrap{max-width:380px;margin:80px auto;}
+  .login-wrap h1{text-align:center;margin-bottom:6px;}
+  .login-wrap p{text-align:center;color:var(--muted);margin-bottom:28px;font-size:.9rem;}
+  .error{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px 14px;border-radius:10px;font-size:.85rem;margin-top:14px;}
+  .empty{text-align:center;padding:50px 20px;color:var(--muted);}
+  .empty .big{font-size:2rem;margin-bottom:8px;}
+  .section-title{display:flex;justify-content:space-between;align-items:center;margin:28px 0 12px;}
+  .section-title h2{font-size:1.05rem;}
+  .toolbar{display:flex;justify-content:flex-end;gap:10px;margin-bottom:16px;}
+  .grid-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:560px){.grid-cards{grid-template-columns:1fr;}}
+  .ex-card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;transition:.15s;}
+  .ex-card:hover{border-color:var(--teal);}
+  .ex-card .thumb{width:100%;height:110px;background:#eef2f1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:1.6rem;overflow:hidden;}
+  .ex-card .thumb img{width:100%;height:100%;object-fit:cover;}
+  .ex-card .body{padding:10px 12px;}
+  .ex-card .name{font-weight:700;font-size:.88rem;}
+  .ex-card .meta{color:var(--muted);font-size:.74rem;margin-top:3px;}
+  .modal-overlay{position:fixed;inset:0;background:rgba(19,42,46,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;}
+  .modal-box{background:#fff;border-radius:16px;padding:24px;max-width:460px;width:100%;max-height:88vh;overflow-y:auto;margin:auto;}
+  .modal-box h3{margin-bottom:16px;}
+  .diagram-preview{width:100%;max-height:220px;object-fit:contain;border-radius:10px;background:#f0ede3;margin-bottom:8px;}
+  .builder-item{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:#fff;}
+  .builder-item .idx{width:22px;height:22px;border-radius:50%;background:var(--teal);color:#fff;font-size:.72rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .builder-item .info{flex:1;min-width:0;}
+  .builder-item .info .name{font-weight:600;font-size:.85rem;}
+  .builder-item .info .meta{color:var(--muted);font-size:.72rem;}
+  .builder-item input{width:56px;padding:6px;text-align:center;font-size:.82rem;flex-shrink:0;}
+  .builder-item .miniBtn{border:none;background:none;cursor:pointer;padding:4px;font-size:.9rem;flex-shrink:0;}
+  .search-row{display:flex;gap:8px;margin-bottom:14px;}
+  .search-row input{flex:1;}
+  .cat-select{max-width:200px;}
+  .total-time{font-size:.8rem;color:var(--muted);font-weight:600;}
+  @media print{
+    .topbar,.crumb,.toolbar,.no-print{display:none !important;}
+    body{background:#fff;}
+    #app{max-width:100%;padding:0;}
+  }
+</style>
+</head>
+<body>
+<div class="topbar no-print" id="topbar" style="display:none;">
+  <div class="brand">🏋️ Entrenamientos<span id="userEmail"></span><span id="roleTag"></span></div>
+  <div class="topbar-right">
+    <a class="applink" href="./index.html">← CanteraPro</a>
+    <button onclick="App.logout()">Cerrar sesión</button>
+  </div>
+</div>
+<div id="app"></div>
+
+<script>
+const SUPABASE_URL = 'https://hdkhhuygjpsazorvtvnf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_EYmpp8rykCNn74nx8MGi3w_Slk-Z1So';
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const CATEGORIES = ['Calentamiento','Técnica individual','Bote y pase','Tiro','Táctica colectiva','Defensa','Transición','Físico','Juego reducido','Vuelta a la calma'];
+
+const App = {
+  view: 'login',
+  user: null, userRole: null, userTeamId: null, userSeason: null,
+  currentTeam: null, currentSession: null,
+  _libraryExercises: [], _sessionBuilder: [],
+
+  async init(){
+    const { data:{ session } } = await client.auth.getSession();
+    if(session){
+      this.user = session.user;
+      await this.loadUserRole();
+      document.getElementById('topbar').style.display='flex';
+      document.getElementById('userEmail').textContent = session.user.email;
+      await this.landingView();
+    }
+    this.render();
+  },
+
+  async loadUserRole(){
+    try{
+      const { data, error } = await client.from('profiles').select('role, team_id, season').eq('id', this.user.id).single();
+      if(!error && data){ this.userRole = data.role; this.userTeamId = data.team_id; this.userSeason = data.season; }
+      else { this.userRole = 'viewer'; this.userTeamId = null; this.userSeason = null; }
+    }catch(e){ this.userRole = 'viewer'; this.userTeamId = null; this.userSeason = null; }
+    const tag = document.getElementById('roleTag');
+    if(tag){
+      if(this.userRole==='viewer') tag.textContent = 'Solo lectura';
+      else if(this.userRole==='coach') tag.textContent = 'Entrenador' + (this.userSeason ? ` · ${this.userSeason}` : '');
+      else tag.textContent = '';
+    }
+  },
+
+  async landingView(){
+    if(this.userRole==='coach' && this.userTeamId){
+      const { data: team, error } = await client.from('teams').select('*').eq('id', this.userTeamId).single();
+      if(!error && team){ this.currentTeam = team; this.view = 'sessions'; return; }
+    }
+    this.view = 'teams';
+  },
+
+  isAdmin(){ return this.userRole === 'admin'; },
+  isCoach(){ return this.userRole === 'coach'; },
+  canManage(){ return this.isAdmin() || this.isCoach(); },
+  requireCanManage(){
+    if(!this.canManage()){ alert('Tu cuenta es de solo lectura.'); return false; }
+    return true;
+  },
+
+  async logout(){
+    await client.auth.signOut();
+    this.user = null; this.userRole = null;
+    document.getElementById('topbar').style.display='none';
+    this.view = 'login'; this.render();
+  },
+
+  async login(email, password){
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true; btn.textContent = 'Entrando...';
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    btn.disabled = false; btn.textContent = 'Entrar';
+    if(error){
+      document.getElementById('loginError').textContent = 'Email o contraseña incorrectos.';
+      document.getElementById('loginError').style.display='block';
+      return;
+    }
+    this.user = data.user;
+    await this.loadUserRole();
+    document.getElementById('topbar').style.display='flex';
+    document.getElementById('userEmail').textContent = data.user.email;
+    await this.landingView();
+    this.render();
+  },
+
+  goTeams(){ this.view='teams'; this.currentTeam=null; this.render(); },
+  goTeam(team){ this.currentTeam = team; this.view='sessions'; this.render(); },
+  goLibrary(){ this.view='library'; this.render(); },
+
+  async render(){
+    const app = document.getElementById('app');
+    app.innerHTML = '<div class="empty">Cargando...</div>';
+    try{
+      if(this.view==='login') return this.renderLogin();
+      if(this.view==='teams') return this.renderTeams();
+      if(this.view==='library') return this.renderLibrary();
+      if(this.view==='sessions') return this.renderSessions();
+      if(this.view==='sessionView') return this.renderSessionView();
+    }catch(err){
+      app.innerHTML = '<div class="card"><p>Ha ocurrido un error: '+err.message+'</p><button class="btn btn-outline" onclick="App.render()">Reintentar</button></div>';
+      console.error(err);
+    }
+  },
+
+  initials(name){
+    if(!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    return ((parts[0]?.[0]||'') + (parts[1]?.[0]||'')).toUpperCase();
+  },
+
+  // ---------- LOGIN ----------
+  renderLogin(){
+    document.getElementById('app').innerHTML = `
+      <div class="login-wrap">
+        <h1>🏋️ Entrenamientos</h1>
+        <p>Inicia sesión para continuar (misma cuenta que CanteraPro)</p>
+        <div class="card">
+          <label>Email</label>
+          <input type="email" id="loginEmail" placeholder="tu@email.com">
+          <label>Contraseña</label>
+          <input type="password" id="loginPassword" placeholder="••••••••">
+          <button id="loginBtn" class="btn btn-primary btn-block" style="margin-top:20px;" onclick="App.login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value)">Entrar</button>
+          <div class="error" id="loginError" style="display:none;"></div>
+        </div>
+      </div>`;
+    document.getElementById('loginPassword').addEventListener('keydown', e=>{
+      if(e.key==='Enter') App.login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value);
+    });
+  },
+
+  // ---------- TEAMS (landing para admin/viewer) ----------
+  async renderTeams(){
+    const { data: teams, error } = await client.from('teams').select('*').order('name');
+    if(error) throw error;
+    let html = `<div class="section-title"><h2>Equipos</h2>
+      <button class="btn btn-outline" onclick="App.goLibrary()">📚 Biblioteca de ejercicios</button></div>`;
+    if(!teams || teams.length===0){
+      html += `<div class="empty"><div class="big">🏟️</div>No hay equipos todavía. Créalos desde CanteraPro.</div>`;
+    } else {
+      teams.forEach(t=>{
+        html += `<div class="list-item" onclick='App.goTeam(${JSON.stringify(t)})'>
+          <div><div class="name">${t.name}</div><div class="meta">Temporada ${t.season}</div></div>
+          <div>→</div></div>`;
+      });
+    }
+    document.getElementById('app').innerHTML = html;
+  },
+
+  // ---------- LIBRARY ----------
+  async renderLibrary(){
+    const { data: exercises, error } = await client.from('exercises').select('*').order('name');
+    if(error) throw error;
+    this._libraryExercises = exercises || [];
+    this.libraryFilter = this.libraryFilter || '';
+    this.libraryCategoryFilter = this.libraryCategoryFilter || 'all';
+    this.renderLibraryBody();
+  },
+
+  onLibraryFilterChange(field, value){
+    if(field==='text') this.libraryFilter = value;
+    if(field==='category') this.libraryCategoryFilter = value;
+    this.renderLibraryBody();
+  },
+
+  renderLibraryBody(){
+    const q = (this.libraryFilter||'').toLowerCase();
+    const cat = this.libraryCategoryFilter || 'all';
+    const filtered = this._libraryExercises
+      .filter(e=> cat==='all' || e.category===cat)
+      .filter(e=> !q || e.name.toLowerCase().includes(q));
+
+    let html = `<div class="crumb" onclick="App.goTeams()">← Equipos</div>
+      <div class="section-title"><h2>📚 Biblioteca de ejercicios</h2>
+      ${this.canManage() ? `<button class="btn btn-primary" onclick="App.openExerciseModal(null)">+ Nuevo ejercicio</button>` : ''}</div>
+      <div class="search-row">
+        <input type="text" placeholder="Buscar por nombre..." value="${this.libraryFilter||''}" oninput="App.onLibraryFilterChange('text', this.value)">
+        <select class="cat-select" onchange="App.onLibraryFilterChange('category', this.value)">
+          <option value="all">Todas las categorías</option>
+          ${CATEGORIES.map(c=>`<option value="${c}" ${cat===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>`;
+
+    if(filtered.length===0){
+      html += `<div class="empty"><div class="big">📚</div>No hay ejercicios que coincidan.</div>`;
+    } else {
+      html += `<div class="grid-cards">`;
+      filtered.forEach(ex=>{
+        html += `<div class="ex-card" onclick='App.openExerciseModal(${JSON.stringify(ex)})'>
+          <div class="thumb">${ex.diagram_url ? `<img src="${ex.diagram_url}">` : '🏀'}</div>
+          <div class="body">
+            <div class="name">${ex.name}</div>
+            <div class="meta">${ex.category||'Sin categoría'}${ex.duration_minutes?` · ${ex.duration_minutes} min`:''}</div>
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+    document.getElementById('app').innerHTML = html;
+  },
+
+  openExerciseModal(exercise){
+    if(!this.requireCanManage()) return;
+    const isEdit = !!exercise;
+    const canDelete = isEdit && (this.isAdmin() || exercise.created_by === this.user.id);
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'exerciseModalOverlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3>${isEdit ? 'Editar ejercicio' : 'Nuevo ejercicio'}</h3>
+        ${exercise && exercise.diagram_url ? `<img src="${exercise.diagram_url}" class="diagram-preview" id="exDiagramPreview">` : `<div id="exDiagramPreview"></div>`}
+        <label>Diagrama / pizarra táctica (opcional)</label>
+        <input type="file" accept="image/*" id="exModalDiagramInput" onchange="App.previewExerciseDiagram(event)">
+        <label>Nombre</label>
+        <input type="text" id="exModalName" value="${exercise ? exercise.name.replace(/"/g,'&quot;') : ''}" placeholder="Ej. Rondo 4x1">
+        <label>Categoría</label>
+        <select id="exModalCategory">
+          <option value="">Sin categoría</option>
+          ${CATEGORIES.map(c=>`<option value="${c}" ${exercise && exercise.category===c ? 'selected':''}>${c}</option>`).join('')}
+        </select>
+        <label>Duración estimada (minutos)</label>
+        <input type="number" min="0" id="exModalDuration" value="${exercise && exercise.duration_minutes!=null ? exercise.duration_minutes : ''}" placeholder="Ej. 10">
+        <label>Descripción</label>
+        <textarea id="exModalDescription" rows="4" placeholder="Cómo se hace, objetivo, variantes...">${exercise ? (exercise.description||'') : ''}</textarea>
+        <div class="row" style="margin-top:20px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="App.closeExerciseModal()">Cancelar</button>
+          <button class="btn btn-primary" id="exModalSaveBtn" style="flex:1;" onclick="App.saveExerciseModal(${isEdit ? `'${exercise.id}'` : 'null'})">Guardar</button>
+        </div>
+        ${canDelete ? `<button class="btn btn-outline" style="width:100%;margin-top:10px;color:#b91c1c;border-color:#fecaca;" onclick="App.deleteExercise('${exercise.id}')">🗑️ Eliminar ejercicio</button>` : ''}
+      </div>`;
+    document.body.appendChild(overlay);
+  },
+
+  closeExerciseModal(){
+    const el = document.getElementById('exerciseModalOverlay');
+    if(el) el.remove();
+  },
+
+  previewExerciseDiagram(event){
+    const file = event.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = e=>{
+      document.getElementById('exDiagramPreview').outerHTML = `<img src="${e.target.result}" class="diagram-preview" id="exDiagramPreview">`;
+    };
+    reader.readAsDataURL(file);
+  },
+
+  compressImage(file, maxDim=900, quality=0.82){
+    return new Promise((resolve, reject)=>{
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = e=>{ img.src = e.target.result; };
+      reader.onerror = reject;
+      img.onload = ()=>{
+        let { width, height } = img;
+        if(width > height && width > maxDim){ height = Math.round(height*(maxDim/width)); width = maxDim; }
+        else if(height > maxDim){ width = Math.round(width*(maxDim/height)); height = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob=>{
+          if(!blob) return reject(new Error('No se pudo procesar la imagen'));
+          resolve(new File([blob], 'diagram.jpg', { type:'image/jpeg' }));
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  },
+
+  async saveExerciseModal(exerciseId){
+    const name = document.getElementById('exModalName').value.trim();
+    if(!name){ alert('Escribe un nombre.'); return; }
+    const category = document.getElementById('exModalCategory').value || null;
+    const durStr = document.getElementById('exModalDuration').value;
+    const duration_minutes = durStr && durStr.trim()!=='' ? parseInt(durStr,10) : null;
+    const description = document.getElementById('exModalDescription').value || null;
+    const fileInput = document.getElementById('exModalDiagramInput');
+    const file = fileInput.files[0];
+
+    const btn = document.getElementById('exModalSaveBtn');
+    btn.disabled = true; btn.textContent = 'Guardando...';
+
+    let diagram_url = undefined;
+    if(file){
+      let uploadFile;
+      try{ uploadFile = await this.compressImage(file); }catch(e){ uploadFile = file; }
+      const path = `${exerciseId || 'new-'+Date.now()}-${Date.now()}.jpg`;
+      const { error: upErr } = await client.storage.from('exercise-diagrams').upload(path, uploadFile, { upsert:true });
+      if(upErr){
+        btn.disabled=false; btn.textContent='Guardar';
+        alert('No se pudo subir el diagrama: '+upErr.message);
+        return;
+      }
+      const { data: pub } = client.storage.from('exercise-diagrams').getPublicUrl(path);
+      diagram_url = pub.publicUrl;
+    }
+
+    const payload = { name, category, duration_minutes, description };
+    if(diagram_url !== undefined) payload.diagram_url = diagram_url;
+
+    let error;
+    if(exerciseId){
+      ({ error } = await client.from('exercises').update(payload).eq('id', exerciseId));
+    } else {
+      payload.created_by = this.user.id;
+      ({ error } = await client.from('exercises').insert(payload));
+    }
+    btn.disabled = false; btn.textContent = 'Guardar';
+    if(error) return alert('Error: '+error.message);
+    this.closeExerciseModal();
+    this.renderLibrary();
+  },
+
+  async deleteExercise(exerciseId){
+    const ok = confirm('¿Eliminar este ejercicio de la biblioteca? Si está usado en alguna sesión, también desaparecerá de ahí.');
+    if(!ok) return;
+    const { error } = await client.from('exercises').delete().eq('id', exerciseId);
+    if(error) return alert('Error: '+error.message);
+    this.closeExerciseModal();
+    this.renderLibrary();
+  },
+
+  // ---------- SESSIONS (por equipo) ----------
+  async renderSessions(){
+    const team = this.currentTeam;
+    const { data: sessions, error } = await client.from('training_sessions')
+      .select('*, session_exercises(id, duration_minutes)')
+      .eq('team_id', team.id).order('session_date', { ascending:false });
+    if(error) throw error;
+
+    let html = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
+      <div class="section-title">
+        <div><h2>${team.name}</h2><p style="color:var(--muted);font-size:.85rem;margin:4px 0 0;">Temporada ${team.season}</p></div>
+        <div class="row">
+          <button class="btn btn-outline" onclick="App.goLibrary()">📚 Biblioteca</button>
+          ${this.canManage() ? `<button class="btn btn-primary" onclick="App.openSessionBuilder(null)">+ Nueva sesión</button>` : ''}
+        </div>
+      </div>`;
+
+    if(!sessions || sessions.length===0){
+      html += `<div class="empty"><div class="big">🏀</div>Todavía no hay sesiones de entrenamiento.</div>`;
+    } else {
+      sessions.forEach(s=>{
+        const totalMin = (s.session_exercises||[]).reduce((sum,se)=> sum + (se.duration_minutes||0), 0);
+        html += `<div class="list-item" onclick="App.openSessionView('${s.id}')">
+          <div><div class="name">${s.title || 'Sesión'} · ${s.session_date}</div>
+            <div class="meta">${(s.session_exercises||[]).length} ejercicios${totalMin?` · ${totalMin} min`:''}</div></div>
+          <div>→</div></div>`;
+      });
+    }
+    document.getElementById('app').innerHTML = html;
+  },
+
+  // ---------- SESSION BUILDER (crear/editar) ----------
+  async openSessionBuilder(sessionId){
+    if(!this.requireCanManage()) return;
+    this._editingSessionId = sessionId;
+    if(sessionId){
+      const { data: sess, error } = await client.from('training_sessions').select('*').eq('id', sessionId).single();
+      if(error) return alert('Error: '+error.message);
+      this._editingSessionRow = sess;
+      const { data: items, error: e2 } = await client.from('session_exercises')
+        .select('*, exercises(name, category, duration_minutes)')
+        .eq('session_id', sessionId).order('sort_order');
+      if(e2) return alert('Error: '+e2.message);
+      this._sessionBuilder = (items||[]).map(it=>({
+        exercise_id: it.exercise_id, name: it.exercises?.name || '(ejercicio eliminado)',
+        category: it.exercises?.category, duration_minutes: it.duration_minutes, notes: it.notes||''
+      }));
+    } else {
+      this._editingSessionRow = null;
+      this._sessionBuilder = [];
+    }
+    if(this._libraryExercises.length===0){
+      const { data: exercises } = await client.from('exercises').select('*').order('name');
+      this._libraryExercises = exercises || [];
+    }
+    this.view = 'sessionBuilder';
+    this.renderSessionBuilder();
+  },
+
+  renderSessionBuilder(){
+    const isEdit = !!this._editingSessionId;
+    const sess = this._editingSessionRow;
+    const totalMin = this._sessionBuilder.reduce((s,i)=> s+(i.duration_minutes||0), 0);
+
+    let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(this.currentTeam)})'>← ${this.currentTeam.name}</div>
+      <h2>${isEdit ? 'Editar sesión' : 'Nueva sesión'}</h2>
+      <div class="card">
+        <label>Título (opcional)</label>
+        <input type="text" id="sessTitle" value="${sess && sess.title ? sess.title.replace(/"/g,'&quot;') : ''}" placeholder="Ej. Trabajo de tiro y defensa">
+        <label>Fecha</label>
+        <input type="date" id="sessDate" value="${sess ? sess.session_date : new Date().toISOString().slice(0,10)}">
+        <label>Notas (opcional)</label>
+        <textarea id="sessNotes" rows="2" placeholder="Observaciones generales de la sesión...">${sess ? (sess.notes||'') : ''}</textarea>
+      </div>
+
+      <div class="section-title"><h2 style="font-size:1rem;">Ejercicios de la sesión</h2>
+        <span class="total-time">${this._sessionBuilder.length} ejercicios · ${totalMin} min total</span></div>
+
+      <div id="builderList">${this.renderBuilderList()}</div>
+
+      <div class="card" style="margin-top:14px;">
+        <label>Añadir ejercicio de la biblioteca</label>
+        <select id="addExerciseSelect">
+          <option value="">Elige un ejercicio...</option>
+          ${this._libraryExercises.map(ex=>`<option value="${ex.id}">${ex.name}${ex.category?` (${ex.category})`:''}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-block" style="margin-top:10px;" onclick="App.addExerciseToBuilder()">+ Añadir a la sesión</button>
+      </div>
+
+      <div class="row" style="margin-top:20px;">
+        <button class="btn btn-outline" style="flex:1;" onclick='App.goTeam(${JSON.stringify(this.currentTeam)})'>Cancelar</button>
+        <button class="btn btn-primary" id="sessSaveBtn" style="flex:1;" onclick="App.saveSession()">Guardar sesión</button>
+      </div>`;
+    document.getElementById('app').innerHTML = html;
+  },
+
+  renderBuilderList(){
+    if(this._sessionBuilder.length===0){
+      return `<div class="empty">Todavía no has añadido ningún ejercicio.</div>`;
+    }
+    return this._sessionBuilder.map((item,idx)=>`
+      <div class="builder-item">
+        <div class="idx">${idx+1}</div>
+        <div class="info">
+          <div class="name">${item.name}</div>
+          <div class="meta">${item.category||'Sin categoría'}</div>
+        </div>
+        <input type="number" min="0" value="${item.duration_minutes!=null?item.duration_minutes:''}" placeholder="min"
+          onchange="App.updateBuilderDuration(${idx}, this.value)">
+        <button class="miniBtn" title="Subir" onclick="App.moveBuilderItem(${idx}, -1)" ${idx===0?'disabled style="opacity:.3;"':''}>▲</button>
+        <button class="miniBtn" title="Bajar" onclick="App.moveBuilderItem(${idx}, 1)" ${idx===this._sessionBuilder.length-1?'disabled style="opacity:.3;"':''}>▼</button>
+        <button class="miniBtn" title="Quitar" onclick="App.removeBuilderItem(${idx})">✕</button>
+      </div>`).join('');
+  },
+
+  addExerciseToBuilder(){
+    const sel = document.getElementById('addExerciseSelect');
+    const exId = sel.value;
+    if(!exId) return;
+    const ex = this._libraryExercises.find(e=>e.id===exId);
+    if(!ex) return;
+    this._sessionBuilder.push({
+      exercise_id: ex.id, name: ex.name, category: ex.category,
+      duration_minutes: ex.duration_minutes, notes: ''
+    });
+    sel.value = '';
+    document.getElementById('builderList').innerHTML = this.renderBuilderList();
+    this.refreshBuilderTotal();
+  },
+
+  removeBuilderItem(idx){
+    this._sessionBuilder.splice(idx,1);
+    document.getElementById('builderList').innerHTML = this.renderBuilderList();
+    this.refreshBuilderTotal();
+  },
+
+  moveBuilderItem(idx, dir){
+    const newIdx = idx+dir;
+    if(newIdx<0 || newIdx>=this._sessionBuilder.length) return;
+    const tmp = this._sessionBuilder[idx];
+    this._sessionBuilder[idx] = this._sessionBuilder[newIdx];
+    this._sessionBuilder[newIdx] = tmp;
+    document.getElementById('builderList').innerHTML = this.renderBuilderList();
+  },
+
+  updateBuilderDuration(idx, value){
+    const v = value!=='' ? parseInt(value,10) : null;
+    this._sessionBuilder[idx].duration_minutes = isNaN(v) ? null : v;
+    this.refreshBuilderTotal();
+  },
+
+  refreshBuilderTotal(){
+    const totalMin = this._sessionBuilder.reduce((s,i)=> s+(i.duration_minutes||0), 0);
+    const el = document.querySelector('.total-time');
+    if(el) el.textContent = `${this._sessionBuilder.length} ejercicios · ${totalMin} min total`;
+  },
+
+  async saveSession(){
+    const title = document.getElementById('sessTitle').value.trim() || null;
+    const session_date = document.getElementById('sessDate').value;
+    const notes = document.getElementById('sessNotes').value.trim() || null;
+    if(!session_date){ alert('Elige una fecha.'); return; }
+
+    const btn = document.getElementById('sessSaveBtn');
+    btn.disabled = true; btn.textContent = 'Guardando...';
+
+    const payload = { team_id: this.currentTeam.id, session_date, title, notes, season: this.currentTeam.season };
+    let sessionId = this._editingSessionId;
+    let error;
+    if(sessionId){
+      ({ error } = await client.from('training_sessions').update(payload).eq('id', sessionId));
+    } else {
+      payload.created_by = this.user.id;
+      const { data, error: e1 } = await client.from('training_sessions').insert(payload).select().single();
+      error = e1;
+      if(!error) sessionId = data.id;
+    }
+    if(error){ btn.disabled=false; btn.textContent='Guardar sesión'; return alert('Error: '+error.message); }
+
+    // reemplaza los ejercicios de la sesión (borra y vuelve a insertar en el nuevo orden)
+    const { error: delErr } = await client.from('session_exercises').delete().eq('session_id', sessionId);
+    if(delErr){ btn.disabled=false; btn.textContent='Guardar sesión'; return alert('Error: '+delErr.message); }
+
+    if(this._sessionBuilder.length){
+      const rows = this._sessionBuilder.map((item, idx)=>({
+        session_id: sessionId, exercise_id: item.exercise_id,
+        sort_order: idx+1, duration_minutes: item.duration_minutes, notes: item.notes||null
+      }));
+      const { error: insErr } = await client.from('session_exercises').insert(rows);
+      if(insErr){ btn.disabled=false; btn.textContent='Guardar sesión'; return alert('Error guardando los ejercicios: '+insErr.message); }
+    }
+
+    btn.disabled = false; btn.textContent = 'Guardar sesión';
+    this.openSessionView(sessionId);
+  },
+
+  // ---------- SESSION VIEW (leer / imprimir / duplicar) ----------
+  async openSessionView(sessionId){
+    this.currentSessionId = sessionId;
+    this.view = 'sessionView';
+    this.render();
+  },
+
+  async renderSessionView(){
+    const { data: sess, error } = await client.from('training_sessions').select('*').eq('id', this.currentSessionId).single();
+    if(error) throw error;
+    const { data: items, error: e2 } = await client.from('session_exercises')
+      .select('*, exercises(name, category, description, diagram_url)')
+      .eq('session_id', sess.id).order('sort_order');
+    if(e2) throw e2;
+
+    const totalMin = (items||[]).reduce((s,i)=> s+(i.duration_minutes||0), 0);
+
+    let html = `<div class="crumb no-print" onclick='App.goTeam(${JSON.stringify(this.currentTeam)})'>← ${this.currentTeam.name}</div>
+      <div class="toolbar no-print">
+        ${this.canManage() ? `<button class="btn btn-outline" onclick="App.openSessionBuilder('${sess.id}')">✏️ Editar</button>` : ''}
+        ${this.canManage() ? `<button class="btn btn-outline" onclick="App.duplicateSession('${sess.id}')">🔁 Duplicar como plantilla</button>` : ''}
+        ${this.canManage() ? `<button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="App.deleteSession('${sess.id}')">🗑️ Eliminar</button>` : ''}
+        <button class="btn btn-outline" onclick="window.print()">Imprimir / PDF</button>
+      </div>
+      <h2>${sess.title || 'Sesión de entrenamiento'}</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">
+        ${this.currentTeam.name} · ${sess.session_date} · ${(items||[]).length} ejercicios · ${totalMin} min total
+      </p>`;
+
+    if(sess.notes){
+      html += `<div class="card"><h3 style="margin-bottom:6px;font-size:.9rem;">Notas</h3><p style="font-size:.88rem;">${sess.notes}</p></div>`;
+    }
+
+    if(!items || items.length===0){
+      html += `<div class="empty">Esta sesión todavía no tiene ejercicios.</div>`;
+    } else {
+      items.forEach((it,idx)=>{
+        const ex = it.exercises || {};
+        html += `<div class="card" style="display:flex;gap:14px;">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--teal);color:#fff;font-weight:700;font-size:.85rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${idx+1}</div>
+          <div style="flex:1;">
+            <div style="font-weight:700;">${ex.name || '(ejercicio eliminado)'} ${it.duration_minutes ? `<span style="color:var(--muted);font-weight:500;font-size:.8rem;">· ${it.duration_minutes} min</span>` : ''}</div>
+            ${ex.category ? `<div class="pill" style="margin-top:6px;">${ex.category}</div>` : ''}
+            ${ex.description ? `<p style="font-size:.85rem;margin-top:8px;">${ex.description}</p>` : ''}
+            ${it.notes ? `<p style="font-size:.8rem;color:var(--muted);margin-top:6px;">Nota: ${it.notes}</p>` : ''}
+          </div>
+          ${ex.diagram_url ? `<img src="${ex.diagram_url}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;flex-shrink:0;">` : ''}
+        </div>`;
+      });
+    }
+    document.getElementById('app').innerHTML = html;
+  },
+
+  async duplicateSession(sessionId){
+    if(!this.requireCanManage()) return;
+    const { data: sess, error } = await client.from('training_sessions').select('*').eq('id', sessionId).single();
+    if(error) return alert('Error: '+error.message);
+    const { data: items, error: e2 } = await client.from('session_exercises').select('*').eq('session_id', sessionId).order('sort_order');
+    if(e2) return alert('Error: '+e2.message);
+
+    this._editingSessionId = null;
+    this._editingSessionRow = { title: sess.title ? `Copia de ${sess.title}` : null, session_date: new Date().toISOString().slice(0,10), notes: sess.notes };
+    if(this._libraryExercises.length===0){
+      const { data: exercises } = await client.from('exercises').select('*').order('name');
+      this._libraryExercises = exercises || [];
+    }
+    this._sessionBuilder = (items||[]).map(it=>{
+      const ex = this._libraryExercises.find(e=>e.id===it.exercise_id);
+      return { exercise_id: it.exercise_id, name: ex ? ex.name : '(ejercicio eliminado)', category: ex ? ex.category : null, duration_minutes: it.duration_minutes, notes: it.notes||'' };
+    });
+    this.view = 'sessionBuilder';
+    this.renderSessionBuilder();
+  },
+
+  async deleteSession(sessionId){
+    if(!this.requireCanManage()) return;
+    const ok = confirm('¿Eliminar esta sesión de entrenamiento? No se puede deshacer.');
+    if(!ok) return;
+    const { error } = await client.from('training_sessions').delete().eq('id', sessionId);
+    if(error) return alert('Error: '+error.message);
+    this.goTeam(this.currentTeam);
+  }
+};
+
+App.init();
+</script>
+</body>
+</html>
