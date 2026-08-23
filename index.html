@@ -210,29 +210,77 @@ const App = {
       await this.loadUserRole();
       document.getElementById('topbar').style.display='flex';
       document.getElementById('userEmail').textContent = session.user.email;
-      this.view = 'teams';
+      await this.landingView();
     }
     this.render();
   },
 
   async loadUserRole(){
     try{
-      const { data, error } = await client.from('profiles').select('role').eq('id', this.user.id).single();
-      this.userRole = (!error && data) ? data.role : 'viewer';
+      const { data, error } = await client.from('profiles').select('role, team_id, season').eq('id', this.user.id).single();
+      if(!error && data){
+        this.userRole = data.role;
+        this.userTeamId = data.team_id;
+        this.userSeason = data.season;
+      } else {
+        this.userRole = 'viewer';
+        this.userTeamId = null;
+        this.userSeason = null;
+      }
     }catch(e){
       this.userRole = 'viewer'; // por seguridad, si algo falla, mejor asumir el rol más restrictivo
+      this.userTeamId = null;
+      this.userSeason = null;
     }
     const tag = document.getElementById('roleTag');
-    if(tag) tag.textContent = this.userRole==='viewer' ? 'Solo lectura' : '';
+    if(tag){
+      if(this.userRole==='viewer') tag.textContent = 'Solo lectura';
+      else if(this.userRole==='coach') tag.textContent = 'Entrenador' + (this.userSeason ? ` · ${this.userSeason}` : '');
+      else tag.textContent = '';
+    }
+  },
+
+  // Si es entrenador, lo llevamos directo a la ficha de SU equipo en vez
+  // de la lista general (no tiene sentido que navegue por otros equipos).
+  async landingView(){
+    if(this.userRole==='coach' && this.userTeamId){
+      const { data: team, error } = await client.from('teams').select('*').eq('id', this.userTeamId).single();
+      if(!error && team){
+        this.currentTeam = team;
+        this.view = 'team';
+        return;
+      }
+    }
+    this.view = 'teams';
   },
 
   isAdmin(){
     return this.userRole === 'admin';
   },
 
+  isCoach(){
+    return this.userRole === 'coach';
+  },
+
+  // Puede crear/editar evaluaciones: el admin siempre, y el entrenador
+  // dentro de su propio equipo (la base de datos hace la comprobación
+  // real de que sea de su equipo y su temporada; esto es solo para la
+  // interfaz).
+  canEvaluate(){
+    return this.isAdmin() || this.isCoach();
+  },
+
   requireAdmin(){
     if(!this.isAdmin()){
-      alert('Tu cuenta es de solo lectura. No puedes crear, editar ni borrar datos.');
+      alert('No tienes permisos para hacer esto.');
+      return false;
+    }
+    return true;
+  },
+
+  requireCanEvaluate(){
+    if(!this.canEvaluate()){
+      alert('Tu cuenta es de solo lectura. No puedes crear ni editar evaluaciones.');
       return false;
     }
     return true;
@@ -242,6 +290,8 @@ const App = {
     await client.auth.signOut();
     this.user = null;
     this.userRole = null;
+    this.userTeamId = null;
+    this.userSeason = null;
     document.getElementById('topbar').style.display='none';
     this.view = 'login';
     this.render();
@@ -261,7 +311,7 @@ const App = {
     await this.loadUserRole();
     document.getElementById('topbar').style.display='flex';
     document.getElementById('userEmail').textContent = data.user.email;
-    this.view = 'teams';
+    await this.landingView();
     this.render();
   },
 
@@ -933,7 +983,7 @@ const App = {
       </div>
       <div class="toolbar" style="margin-top:16px;">
         ${subj.type==='player' && allEvals.length ? `<button class="btn btn-outline" onclick="App.goStats()">📊 Estadísticas</button>` : ''}
-        ${this.isAdmin() ? `<button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button>` : ''}
+        ${this.canEvaluate() ? `<button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button>` : ''}
       </div>`;
 
     if(allEvals.length===0){
@@ -1365,7 +1415,7 @@ const App = {
   },
 
   async startNewEvaluation(){
-    if(!this.requireAdmin()) return;
+    if(!this.requireCanEvaluate()) return;
     const subjectType = this.currentSubject.type;
     const { data: template, error } = await client.from('evaluation_templates')
       .select('*').eq('subject_type', subjectType).limit(1).single();
@@ -1379,7 +1429,7 @@ const App = {
   },
 
   async editEvaluation(evaluationId){
-    if(!this.requireAdmin()) return;
+    if(!this.requireCanEvaluate()) return;
     const { data: ev, error: e1 } = await client.from('evaluations').select('*').eq('id', evaluationId).single();
     if(e1) return alert('Error: '+e1.message);
     const { data: template, error: e2 } = await client.from('evaluation_templates').select('*').eq('id', ev.template_id).single();
@@ -1590,7 +1640,7 @@ const App = {
   },
 
   async saveEvaluation(status){
-    if(!this.requireAdmin()) return;
+    if(!this.requireCanEvaluate()) return;
     const subj = this.currentSubject;
     const template = this.currentTemplate;
     const coachMode = this._coachMode;
@@ -1707,7 +1757,7 @@ const App = {
 
     let html = `<div class="crumb no-print" onclick='App.goSubject(${JSON.stringify(this.currentSubject)})'>← ${this.currentSubject.full_name}</div>
       <div class="toolbar no-print">
-        ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.editEvaluation('${ev.id}')">✏️ Editar evaluación</button>` : ''}
+        ${this.canEvaluate() ? `<button class="btn btn-outline" onclick="App.editEvaluation('${ev.id}')">✏️ Editar evaluación</button>` : ''}
         <button class="btn btn-outline" onclick="window.print()">Imprimir o guardar en PDF</button>
       </div>
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px;">
