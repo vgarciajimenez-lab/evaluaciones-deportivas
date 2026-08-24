@@ -319,6 +319,7 @@ const App = {
   },
 
   goTeams(){ this.view='teams'; this.currentTeam=null; this.render(); },
+  goUsers(){ this.view='users'; this.render(); },
   goClubStats(){ this.view='clubStats'; this.render(); },
   goTeam(team){ this.currentTeam = team; this.view='team'; this.render(); },
   goTeamStats(){ this.view='teamStats'; this.render(); },
@@ -331,6 +332,7 @@ const App = {
     try{
       if(this.view==='login') return this.renderLogin();
       if(this.view==='teams') return this.renderTeams();
+      if(this.view==='users') return this.renderUsers();
       if(this.view==='clubStats') return this.renderClubStats();
       if(this.view==='team') return this.renderTeam();
       if(this.view==='teamStats') return this.renderTeamStats();
@@ -372,6 +374,7 @@ const App = {
       <div class="row">
         ${teams && teams.length>1 ? `<button class="btn btn-outline" onclick="App.goClubStats()">📊 Estadísticas del club</button>` : ''}
         ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.exportFullBackup(this)">💾 Copia de seguridad</button>` : ''}
+        ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.goUsers()">👥 Gestión de accesos</button>` : ''}
         ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button>` : ''}
       </div></div>`;
     if(!teams || teams.length===0){
@@ -464,6 +467,93 @@ const App = {
     } finally {
       if(btn){ btn.disabled = false; btn.textContent = '💾 Copia de seguridad'; }
     }
+  },
+
+  // ---------- GESTIÓN DE ACCESOS (asignar rol/equipo/temporada a cada usuario) ----------
+  async renderUsers(){
+    if(!this.requireAdmin()){ this.goTeams(); return; }
+    const [{ data: profiles, error: e1 }, { data: teams, error: e2 }] = await Promise.all([
+      client.from('profiles').select('*').order('full_name'),
+      client.from('teams').select('*').order('name')
+    ]);
+    if(e1) throw e1; if(e2) throw e2;
+    this._usersTeams = teams || [];
+
+    let html = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
+      <h2>Gestión de accesos</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">
+        Aquí asignas el rol, equipo y temporada de cada persona que ya haya sido creada en
+        Supabase (Authentication → Users). Crear el usuario en sí sigue haciéndose ahí — esto
+        es solo para configurar qué puede ver y hacer una vez creado.
+      </p>`;
+
+    if(!profiles || profiles.length===0){
+      html += `<div class="empty">No hay usuarios todavía.</div>`;
+      document.getElementById('app').innerHTML = html;
+      return;
+    }
+
+    profiles.forEach(p=>{
+      const isSelf = p.id === this.user.id;
+      const label = p.full_name || p.id;
+      html += `<div class="card" id="userCard-${p.id}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${isSelf?'0':'12px'};">
+          <div style="font-weight:700;">${label}</div>
+          ${isSelf ? `<span class="pill">Eres tú (admin)</span>` : ''}
+        </div>`;
+      if(!isSelf){
+        html += `<div class="row">
+          <div style="flex:1;min-width:140px;">
+            <label style="margin-top:0;">Rol</label>
+            <select id="userRole-${p.id}" onchange="App.onUserRoleChange('${p.id}')">
+              <option value="viewer" ${p.role==='viewer'?'selected':''}>Solo lectura</option>
+              <option value="coach" ${p.role==='coach'?'selected':''}>Entrenador</option>
+              <option value="admin" ${p.role==='admin'?'selected':''}>Admin</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:160px;" id="userTeamWrap-${p.id}" ${p.role!=='coach'?'style="display:none;flex:1;min-width:160px;"':''}>
+            <label style="margin-top:0;">Equipo</label>
+            <select id="userTeam-${p.id}">
+              <option value="">Sin equipo</option>
+              ${this._usersTeams.map(t=>`<option value="${t.id}" ${p.team_id===t.id?'selected':''}>${t.name}</option>`).join('')}
+            </select>
+          </div>
+          <div style="flex:1;min-width:120px;" id="userSeasonWrap-${p.id}" ${p.role!=='coach'?'style="display:none;flex:1;min-width:120px;"':''}>
+            <label style="margin-top:0;">Temporada</label>
+            <input type="text" id="userSeason-${p.id}" value="${p.season||''}" placeholder="Ej. 2026/2027">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:14px;" onclick="App.saveUserAccess('${p.id}')">Guardar</button>`;
+      }
+      html += `</div>`;
+    });
+
+    document.getElementById('app').innerHTML = html;
+  },
+
+  onUserRoleChange(userId){
+    const role = document.getElementById('userRole-'+userId).value;
+    const teamWrap = document.getElementById('userTeamWrap-'+userId);
+    const seasonWrap = document.getElementById('userSeasonWrap-'+userId);
+    const show = role==='coach';
+    teamWrap.style.display = show ? 'block' : 'none';
+    seasonWrap.style.display = show ? 'block' : 'none';
+  },
+
+  async saveUserAccess(userId){
+    const role = document.getElementById('userRole-'+userId).value;
+    let team_id = null, season = null;
+    if(role==='coach'){
+      team_id = document.getElementById('userTeam-'+userId).value || null;
+      season = document.getElementById('userSeason-'+userId).value.trim() || null;
+      if(!team_id || !season){
+        alert('Para el rol "Entrenador" tienes que elegir un equipo y escribir una temporada.');
+        return;
+      }
+    }
+    const { error } = await client.from('profiles').update({ role, team_id, season }).eq('id', userId);
+    if(error) return alert('Error: '+error.message);
+    alert('Guardado correctamente.');
   },
 
   async exportTeamCSV(){
