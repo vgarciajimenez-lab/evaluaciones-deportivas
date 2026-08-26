@@ -471,45 +471,87 @@ const App = {
       const { data: exercises } = await client.from('exercises').select('*').order('name');
       this._libraryExercises = exercises || [];
     }
+    this._builderDirty = false;
     this.view = 'sessionBuilder';
     this.renderSessionBuilder();
+  },
+
+  SESSION_DURATION_WARNING: 90,
+  SESSION_DURATION_DANGER: 120,
+
+  totalTimeHtml(){
+    const totalMin = this._sessionBuilder.reduce((s,i)=> s+(i.duration_minutes||0), 0);
+    let color = 'var(--muted)';
+    let extra = '';
+    if(totalMin >= this.SESSION_DURATION_DANGER){ color = '#dc2626'; extra = ' ⚠️'; }
+    else if(totalMin >= this.SESSION_DURATION_WARNING){ color = '#b45309'; extra = ' ⚠️'; }
+    return `<span class="total-time" style="color:${color};">${this._sessionBuilder.length} ejercicios · ${totalMin} min total${extra}</span>`;
+  },
+
+  markBuilderDirty(){ this._builderDirty = true; },
+
+  exitSessionBuilder(){
+    if(this._builderDirty){
+      const ok = confirm('Tienes cambios sin guardar en esta sesión. ¿Seguro que quieres salir sin guardarlos?');
+      if(!ok) return;
+    }
+    this._builderDirty = false;
+    this.goTeam(this.currentTeam);
   },
 
   renderSessionBuilder(){
     const isEdit = !!this._editingSessionId;
     const sess = this._editingSessionRow;
-    const totalMin = this._sessionBuilder.reduce((s,i)=> s+(i.duration_minutes||0), 0);
 
-    let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(this.currentTeam)})'>← ${this.currentTeam.name}</div>
+    let html = `<div class="crumb" onclick="App.exitSessionBuilder()">← ${this.currentTeam.name}</div>
       <h2>${isEdit ? 'Editar sesión' : 'Nueva sesión'}</h2>
       <div class="card">
         <label>Título (opcional)</label>
-        <input type="text" id="sessTitle" value="${sess && sess.title ? sess.title.replace(/"/g,'&quot;') : ''}" placeholder="Ej. Trabajo de tiro y defensa">
+        <input type="text" id="sessTitle" value="${sess && sess.title ? sess.title.replace(/"/g,'&quot;') : ''}" placeholder="Ej. Trabajo de tiro y defensa" oninput="App.markBuilderDirty()">
         <label>Fecha</label>
-        <input type="date" id="sessDate" value="${sess ? sess.session_date : new Date().toISOString().slice(0,10)}">
+        <input type="date" id="sessDate" value="${sess ? sess.session_date : new Date().toISOString().slice(0,10)}" oninput="App.markBuilderDirty()">
         <label>Notas (opcional)</label>
-        <textarea id="sessNotes" rows="2" placeholder="Observaciones generales de la sesión...">${sess ? (sess.notes||'') : ''}</textarea>
+        <textarea id="sessNotes" rows="2" placeholder="Observaciones generales de la sesión..." oninput="App.markBuilderDirty()">${sess ? (sess.notes||'') : ''}</textarea>
       </div>
 
       <div class="section-title"><h2 style="font-size:1rem;">Ejercicios de la sesión</h2>
-        <span class="total-time">${this._sessionBuilder.length} ejercicios · ${totalMin} min total</span></div>
+        <span id="totalTimeWrap">${this.totalTimeHtml()}</span></div>
 
       <div id="builderList">${this.renderBuilderList()}</div>
 
       <div class="card" style="margin-top:14px;">
         <label>Añadir ejercicio de la biblioteca</label>
-        <select id="addExerciseSelect">
-          <option value="">Elige un ejercicio...</option>
-          ${this._libraryExercises.map(ex=>`<option value="${ex.id}">${ex.name}${ex.category?` (${ex.category})`:''}</option>`).join('')}
-        </select>
+        <div class="search-row" style="margin-bottom:8px;">
+          <input type="text" id="addExerciseSearch" placeholder="Buscar por nombre..." oninput="App.filterAddExerciseSelect()">
+          <select class="cat-select" id="addExerciseCategoryFilter" onchange="App.filterAddExerciseSelect()">
+            <option value="all">Todas las categorías</option>
+            ${CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <select id="addExerciseSelect"></select>
         <button class="btn btn-outline btn-block" style="margin-top:10px;" onclick="App.addExerciseToBuilder()">+ Añadir a la sesión</button>
       </div>
 
       <div class="row" style="margin-top:20px;">
-        <button class="btn btn-outline" style="flex:1;" onclick='App.goTeam(${JSON.stringify(this.currentTeam)})'>Cancelar</button>
+        <button class="btn btn-outline" style="flex:1;" onclick="App.exitSessionBuilder()">Cancelar</button>
         <button class="btn btn-primary" id="sessSaveBtn" style="flex:1;" onclick="App.saveSession()">Guardar sesión</button>
       </div>`;
     document.getElementById('app').innerHTML = html;
+    this.filterAddExerciseSelect();
+  },
+
+  filterAddExerciseSelect(){
+    const searchEl = document.getElementById('addExerciseSearch');
+    const catEl = document.getElementById('addExerciseCategoryFilter');
+    const sel = document.getElementById('addExerciseSelect');
+    if(!sel) return;
+    const q = (searchEl ? searchEl.value : '').toLowerCase();
+    const cat = catEl ? catEl.value : 'all';
+    const filtered = this._libraryExercises
+      .filter(ex=> cat==='all' || ex.category===cat)
+      .filter(ex=> !q || ex.name.toLowerCase().includes(q));
+    sel.innerHTML = `<option value="">Elige un ejercicio... (${filtered.length})</option>` +
+      filtered.map(ex=>`<option value="${ex.id}">${ex.name}${ex.category?` (${ex.category})`:''}</option>`).join('');
   },
 
   renderBuilderList(){
@@ -542,12 +584,14 @@ const App = {
       duration_minutes: ex.duration_minutes, notes: ''
     });
     sel.value = '';
+    this.markBuilderDirty();
     document.getElementById('builderList').innerHTML = this.renderBuilderList();
     this.refreshBuilderTotal();
   },
 
   removeBuilderItem(idx){
     this._sessionBuilder.splice(idx,1);
+    this.markBuilderDirty();
     document.getElementById('builderList').innerHTML = this.renderBuilderList();
     this.refreshBuilderTotal();
   },
@@ -558,19 +602,20 @@ const App = {
     const tmp = this._sessionBuilder[idx];
     this._sessionBuilder[idx] = this._sessionBuilder[newIdx];
     this._sessionBuilder[newIdx] = tmp;
+    this.markBuilderDirty();
     document.getElementById('builderList').innerHTML = this.renderBuilderList();
   },
 
   updateBuilderDuration(idx, value){
     const v = value!=='' ? parseInt(value,10) : null;
     this._sessionBuilder[idx].duration_minutes = isNaN(v) ? null : v;
+    this.markBuilderDirty();
     this.refreshBuilderTotal();
   },
 
   refreshBuilderTotal(){
-    const totalMin = this._sessionBuilder.reduce((s,i)=> s+(i.duration_minutes||0), 0);
-    const el = document.querySelector('.total-time');
-    if(el) el.textContent = `${this._sessionBuilder.length} ejercicios · ${totalMin} min total`;
+    const wrap = document.getElementById('totalTimeWrap');
+    if(wrap) wrap.innerHTML = this.totalTimeHtml();
   },
 
   async saveSession(){
@@ -609,6 +654,7 @@ const App = {
     }
 
     btn.disabled = false; btn.textContent = 'Guardar sesión';
+    this._builderDirty = false;
     this.openSessionView(sessionId);
   },
 
@@ -682,6 +728,7 @@ const App = {
       const ex = this._libraryExercises.find(e=>e.id===it.exercise_id);
       return { exercise_id: it.exercise_id, name: ex ? ex.name : '(ejercicio eliminado)', category: ex ? ex.category : null, duration_minutes: it.duration_minutes, notes: it.notes||'' };
     });
+    this._builderDirty = true; // es una copia nueva, todavía no guardada
     this.view = 'sessionBuilder';
     this.renderSessionBuilder();
   },
@@ -697,6 +744,13 @@ const App = {
 };
 
 App.init();
+
+window.addEventListener('beforeunload', (e)=>{
+  if(App._builderDirty){
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
 </script>
 </body>
 </html>
