@@ -61,7 +61,9 @@
   .ex-card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;transition:.15s;}
   .ex-card:hover{border-color:var(--teal);}
   .ex-card .thumb{width:100%;height:110px;background:#eef2f1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:1.6rem;overflow:hidden;}
-  .ex-card .thumb img{width:100%;height:100%;object-fit:cover;}
+  .ex-card .thumb img{width:100%;height:100%;object-fit:contain;}
+  .ex-card .thumb{position:relative;}
+  .ex-card .thumb .count-badge{position:absolute;bottom:6px;right:6px;background:rgba(10,53,64,.85);color:#fff;font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:100px;}
   .ex-card .body{padding:10px 12px;}
   .ex-card .name{font-weight:700;font-size:.88rem;}
   .ex-card .meta{color:var(--muted);font-size:.74rem;margin-top:3px;}
@@ -69,6 +71,13 @@
   .modal-box{background:#fff;border-radius:16px;padding:24px;max-width:460px;width:100%;max-height:88vh;overflow-y:auto;margin:auto;}
   .modal-box h3{margin-bottom:16px;}
   .diagram-preview{width:100%;max-height:220px;object-fit:contain;border-radius:10px;background:#f0ede3;margin-bottom:8px;}
+  .diagram-gallery{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;}
+  .diagram-gallery .thumb-wrap{position:relative;width:78px;height:78px;border-radius:8px;overflow:hidden;background:#f0ede3;flex-shrink:0;}
+  .diagram-gallery .thumb-wrap img{width:100%;height:100%;object-fit:contain;}
+  .diagram-gallery .thumb-wrap .removeBtn{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:50%;width:19px;height:19px;font-size:.68rem;cursor:pointer;line-height:1;}
+  .diagram-gallery .empty-note{color:var(--muted);font-size:.8rem;padding:8px 0;}
+  .session-ex-gallery{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;max-width:200px;}
+  .session-ex-gallery img{width:70px;height:70px;object-fit:contain;background:#f0ede3;border-radius:8px;}
   .builder-item{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:#fff;}
   .builder-item .idx{width:22px;height:22px;border-radius:50%;background:var(--teal);color:#fff;font-size:.72rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .builder-item .info{flex:1;min-width:0;}
@@ -280,7 +289,7 @@ const App = {
       html += `<div class="grid-cards">`;
       filtered.forEach(ex=>{
         html += `<div class="ex-card" onclick='App.openExerciseModal(${JSON.stringify(ex)})'>
-          <div class="thumb">${ex.diagram_url ? `<img src="${ex.diagram_url}">` : '🏀'}</div>
+          <div class="thumb">${(ex.diagram_urls && ex.diagram_urls.length) ? `<img src="${ex.diagram_urls[0]}">${ex.diagram_urls.length>1 ? `<span class="count-badge">+${ex.diagram_urls.length-1}</span>` : ''}` : '🏀'}</div>
           <div class="body">
             <div class="name">${ex.name}</div>
             <div class="meta">${ex.category||'Sin categoría'}${ex.duration_minutes?` · ${ex.duration_minutes} min`:''}</div>
@@ -296,15 +305,19 @@ const App = {
     if(!this.requireCanManage()) return;
     const isEdit = !!exercise;
     const canDelete = isEdit && (this.isAdmin() || exercise.created_by === this.user.id);
+    this._exModalExistingImages = exercise && exercise.diagram_urls ? [...exercise.diagram_urls]
+      : (exercise && exercise.diagram_url ? [exercise.diagram_url] : []);
+    this._exModalNewFiles = [];
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.id = 'exerciseModalOverlay';
     overlay.innerHTML = `
       <div class="modal-box">
         <h3>${isEdit ? 'Editar ejercicio' : 'Nuevo ejercicio'}</h3>
-        ${exercise && exercise.diagram_url ? `<img src="${exercise.diagram_url}" class="diagram-preview" id="exDiagramPreview">` : `<div id="exDiagramPreview"></div>`}
-        <label>Diagrama / pizarra táctica (opcional)</label>
-        <input type="file" accept="image/*" id="exModalDiagramInput" onchange="App.previewExerciseDiagram(event)">
+        <label>Imágenes / diagramas de pizarra táctica (opcional, puedes subir varias)</label>
+        <div class="diagram-gallery" id="exGalleryWrap">${this.renderExGalleryHtml()}</div>
+        <input type="file" accept="image/*" multiple id="exModalDiagramInput" onchange="App.addExerciseFiles(event)">
         <label>Nombre</label>
         <input type="text" id="exModalName" value="${exercise ? exercise.name.replace(/"/g,'&quot;') : ''}" placeholder="Ej. Rondo 4x1">
         <label>Categoría</label>
@@ -330,14 +343,37 @@ const App = {
     if(el) el.remove();
   },
 
-  previewExerciseDiagram(event){
-    const file = event.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = e=>{
-      document.getElementById('exDiagramPreview').outerHTML = `<img src="${e.target.result}" class="diagram-preview" id="exDiagramPreview">`;
-    };
-    reader.readAsDataURL(file);
+  renderExGalleryHtml(){
+    const existing = (this._exModalExistingImages||[]).map((url, idx)=>
+      `<div class="thumb-wrap"><img src="${url}"><button class="removeBtn" title="Quitar" onclick="App.removeExistingImage(${idx})">✕</button></div>`
+    ).join('');
+    const pending = (this._exModalNewFiles||[]).map((file, idx)=>
+      `<div class="thumb-wrap"><img src="${URL.createObjectURL(file)}"><button class="removeBtn" title="Quitar" onclick="App.removeNewFile(${idx})">✕</button></div>`
+    ).join('');
+    const total = existing + pending;
+    return total || `<div class="empty-note">Sin imágenes todavía</div>`;
+  },
+
+  refreshExGallery(){
+    const wrap = document.getElementById('exGalleryWrap');
+    if(wrap) wrap.innerHTML = this.renderExGalleryHtml();
+  },
+
+  addExerciseFiles(event){
+    const files = Array.from(event.target.files || []);
+    this._exModalNewFiles.push(...files);
+    event.target.value = ''; // permite volver a elegir el mismo archivo si lo quitas y lo vuelves a añadir
+    this.refreshExGallery();
+  },
+
+  removeExistingImage(idx){
+    this._exModalExistingImages.splice(idx, 1);
+    this.refreshExGallery();
+  },
+
+  removeNewFile(idx){
+    this._exModalNewFiles.splice(idx, 1);
+    this.refreshExGallery();
   },
 
   compressImage(file, maxDim=900, quality=0.82){
@@ -370,29 +406,27 @@ const App = {
     const durStr = document.getElementById('exModalDuration').value;
     const duration_minutes = durStr && durStr.trim()!=='' ? parseInt(durStr,10) : null;
     const description = document.getElementById('exModalDescription').value || null;
-    const fileInput = document.getElementById('exModalDiagramInput');
-    const file = fileInput.files[0];
 
     const btn = document.getElementById('exModalSaveBtn');
     btn.disabled = true; btn.textContent = 'Guardando...';
 
-    let diagram_url = undefined;
-    if(file){
+    const uploadedUrls = [];
+    for(const file of (this._exModalNewFiles||[])){
       let uploadFile;
       try{ uploadFile = await this.compressImage(file); }catch(e){ uploadFile = file; }
-      const path = `${exerciseId || 'new-'+Date.now()}-${Date.now()}.jpg`;
+      const path = `${exerciseId || 'new-'+Date.now()}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
       const { error: upErr } = await client.storage.from('exercise-diagrams').upload(path, uploadFile, { upsert:true });
       if(upErr){
         btn.disabled=false; btn.textContent='Guardar';
-        alert('No se pudo subir el diagrama: '+upErr.message);
+        alert('No se pudo subir una de las imágenes: '+upErr.message);
         return;
       }
       const { data: pub } = client.storage.from('exercise-diagrams').getPublicUrl(path);
-      diagram_url = pub.publicUrl;
+      uploadedUrls.push(pub.publicUrl);
     }
 
-    const payload = { name, category, duration_minutes, description };
-    if(diagram_url !== undefined) payload.diagram_url = diagram_url;
+    const diagram_urls = [...(this._exModalExistingImages||[]), ...uploadedUrls];
+    const payload = { name, category, duration_minutes, description, diagram_urls };
 
     let error;
     if(exerciseId){
@@ -669,7 +703,7 @@ const App = {
     const { data: sess, error } = await client.from('training_sessions').select('*').eq('id', this.currentSessionId).single();
     if(error) throw error;
     const { data: items, error: e2 } = await client.from('session_exercises')
-      .select('*, exercises(name, category, description, diagram_url)')
+      .select('*, exercises(name, category, description, diagram_urls)')
       .eq('session_id', sess.id).order('sort_order');
     if(e2) throw e2;
 
@@ -704,7 +738,7 @@ const App = {
             ${ex.description ? `<p style="font-size:.85rem;margin-top:8px;">${ex.description}</p>` : ''}
             ${it.notes ? `<p style="font-size:.8rem;color:var(--muted);margin-top:6px;">Nota: ${it.notes}</p>` : ''}
           </div>
-          ${ex.diagram_url ? `<img src="${ex.diagram_url}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;flex-shrink:0;">` : ''}
+          ${(ex.diagram_urls && ex.diagram_urls.length) ? `<div class="session-ex-gallery">${ex.diagram_urls.map(url=>`<img src="${url}">`).join('')}</div>` : ''}
         </div>`;
       });
     }
