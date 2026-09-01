@@ -452,10 +452,12 @@ const App = {
   // Drive, tu ordenador...) de vez en cuando, sobre todo antes de hacer
   // cambios grandes en la app.
   async exportFullBackup(btn){
+    if(!this.requireAdmin()) return;
     if(btn){ btn.disabled = true; btn.textContent = 'Generando copia...'; }
     try{
       const tables = ['teams','players','coaches','evaluation_templates','scale_levels',
-                       'categories','criteria','evaluations','evaluation_scores'];
+                       'categories','criteria','evaluations','evaluation_scores',
+                       'profiles','exercises','training_sessions','session_exercises'];
       const backup = { generated_at: new Date().toISOString(), app: 'CanteraPro' };
       for(const t of tables){
         const { data, error } = await client.from(t).select('*');
@@ -513,22 +515,29 @@ const App = {
           </div>
           <div style="flex:1;min-width:160px;" id="userTeamWrap-${p.id}" ${p.role!=='coach'?'style="display:none;flex:1;min-width:160px;"':''}>
             <label style="margin-top:0;">Equipo</label>
-            <select id="userTeam-${p.id}">
+            <select id="userTeam-${p.id}" onchange="App.onUserTeamChange('${p.id}')">
               <option value="">Sin equipo</option>
               ${this._usersTeams.map(t=>`<option value="${t.id}" ${p.team_id===t.id?'selected':''}>${t.name}</option>`).join('')}
             </select>
           </div>
           <div style="flex:1;min-width:120px;" id="userSeasonWrap-${p.id}" ${p.role!=='coach'?'style="display:none;flex:1;min-width:120px;"':''}>
             <label style="margin-top:0;">Temporada</label>
-            <input type="text" id="userSeason-${p.id}" value="${p.season||''}" placeholder="Ej. 2026/2027">
+            <input type="text" id="userSeason-${p.id}" value="${p.season||''}" placeholder="Elige un equipo" readonly style="background:#f0ede3;color:var(--muted);cursor:not-allowed;">
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" style="margin-top:14px;" onclick="App.saveUserAccess('${p.id}')">Guardar</button>`;
+        <p style="font-size:.76rem;color:var(--muted);margin:8px 0 0;">La temporada se rellena sola con la del equipo elegido, para que nunca se desajuste.</p>
+        <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="App.saveUserAccess('${p.id}')">Guardar</button>`;
       }
       html += `</div>`;
     });
 
     document.getElementById('app').innerHTML = html;
+  },
+
+  onUserTeamChange(userId){
+    const teamId = document.getElementById('userTeam-'+userId).value;
+    const team = this._usersTeams.find(t=>t.id===teamId);
+    document.getElementById('userSeason-'+userId).value = team ? team.season : '';
   },
 
   onUserRoleChange(userId){
@@ -538,6 +547,7 @@ const App = {
     const show = role==='coach';
     teamWrap.style.display = show ? 'block' : 'none';
     seasonWrap.style.display = show ? 'block' : 'none';
+    if(show) this.onUserTeamChange(userId);
   },
 
   async saveUserAccess(userId){
@@ -547,7 +557,7 @@ const App = {
       team_id = document.getElementById('userTeam-'+userId).value || null;
       season = document.getElementById('userSeason-'+userId).value.trim() || null;
       if(!team_id || !season){
-        alert('Para el rol "Entrenador" tienes que elegir un equipo y escribir una temporada.');
+        alert('Para el rol "Entrenador" tienes que elegir un equipo.');
         return;
       }
     }
