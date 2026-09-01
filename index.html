@@ -777,6 +777,7 @@ const App = {
           </div>
           ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editPlayer(${JSON.stringify(p)})'>✏️</button>` : ''}
           ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("players", "${p.id}", false)'>⏸️</button>` : ''}
+          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Mover a otro equipo" onclick='event.stopPropagation(); App.openMovePlayerModal(${JSON.stringify(p)})'>🔀</button>` : ''}
           <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
       });
     }
@@ -902,6 +903,49 @@ const App = {
     if(el) el.remove();
   },
 
+  async openMovePlayerModal(player){
+    if(!this.requireAdmin()) return;
+    const { data: teams, error } = await client.from('teams').select('*').neq('id', this.currentTeam.id).order('name');
+    if(error) return alert('Error: '+error.message);
+    if(!teams || teams.length===0){ alert('No hay otros equipos a los que mover este jugador.'); return; }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'movePlayerModalOverlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3>Mover a otro equipo</h3>
+        <p style="color:var(--muted);font-size:.85rem;margin-bottom:14px;">
+          <strong>${player.full_name}</strong> conservará todo su historial de evaluaciones al pasar de equipo.
+        </p>
+        <label style="margin-top:0;">Nuevo equipo</label>
+        <select id="movePlayerTeamSelect">
+          ${teams.map(t=>`<option value="${t.id}">${t.name} · ${t.season}</option>`).join('')}
+        </select>
+        <div class="row" style="margin-top:20px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="App.closeMovePlayerModal()">Cancelar</button>
+          <button class="btn btn-primary" id="movePlayerSaveBtn" style="flex:1;" onclick="App.confirmMovePlayer('${player.id}')">Mover</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  },
+
+  closeMovePlayerModal(){
+    const el = document.getElementById('movePlayerModalOverlay');
+    if(el) el.remove();
+  },
+
+  async confirmMovePlayer(playerId){
+    const newTeamId = document.getElementById('movePlayerTeamSelect').value;
+    const btn = document.getElementById('movePlayerSaveBtn');
+    btn.disabled = true; btn.textContent = 'Moviendo...';
+    const { error } = await client.from('players').update({ team_id: newTeamId }).eq('id', playerId);
+    btn.disabled = false; btn.textContent = 'Mover';
+    if(error) return alert('Error: '+error.message);
+    this.closeMovePlayerModal();
+    this.renderTeam();
+  },
+
   // Reduce el tamaño de la foto antes de subirla, para no gastar de más
   // el almacenamiento gratuito de Supabase (limitado). Redimensiona al
   // lado más largo a un máximo y la convierte a JPEG de calidad 0.8.
@@ -945,6 +989,18 @@ const App = {
   async savePlayerModal(playerId){
     const name = document.getElementById('playerModalName').value.trim();
     if(!name){ alert('Escribe un nombre.'); return; }
+
+    // Aviso (no bloqueo) si ya hay otro jugador con el mismo nombre en este equipo
+    const { data: existing } = await client.from('players')
+      .select('id, full_name').eq('team_id', this.currentTeam.id).eq('active', true);
+    const duplicate = (existing||[]).find(p =>
+      p.id !== playerId && p.full_name.trim().toLowerCase() === name.toLowerCase()
+    );
+    if(duplicate){
+      const proceed = confirm(`Ya existe un jugador llamado "${duplicate.full_name}" en este equipo.\n\n¿Quieres crearlo/guardarlo igualmente?`);
+      if(!proceed) return;
+    }
+
     const numStr = document.getElementById('playerModalNumber').value;
     const number = numStr && numStr.trim() !== '' ? parseInt(numStr, 10) : null;
     const fileInput = document.getElementById('playerModalPhotoInput');
