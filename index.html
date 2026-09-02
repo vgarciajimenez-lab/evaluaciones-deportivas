@@ -457,7 +457,7 @@ const App = {
     try{
       const tables = ['teams','players','coaches','evaluation_templates','scale_levels',
                        'categories','criteria','evaluations','evaluation_scores',
-                       'profiles','exercises','training_sessions','session_exercises'];
+                       'profiles','exercises','training_sessions','session_exercises','session_attendance'];
       const backup = { generated_at: new Date().toISOString(), app: 'CanteraPro' };
       for(const t of tables){
         const { data, error } = await client.from(t).select('*');

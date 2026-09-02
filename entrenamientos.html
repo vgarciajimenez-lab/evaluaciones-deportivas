@@ -202,6 +202,7 @@ const App = {
 
   goTeams(){ this.view='teams'; this.currentTeam=null; this.render(); },
   goTeam(team){ this.currentTeam = team; this.view='sessions'; this.render(); },
+  goAttendanceSummary(){ this.view='attendanceSummary'; this.render(); },
   goLibrary(){ this.view='library'; this.render(); },
 
   async render(){
@@ -212,6 +213,7 @@ const App = {
       if(this.view==='teams') return this.renderTeams();
       if(this.view==='library') return this.renderLibrary();
       if(this.view==='sessions') return this.renderSessions();
+      if(this.view==='attendanceSummary') return this.renderAttendanceSummary();
       if(this.view==='sessionView') return this.renderSessionView();
     }catch(err){
       app.innerHTML = '<div class="card"><p>Ha ocurrido un error: '+err.message+'</p><button class="btn btn-outline" onclick="App.render()">Reintentar</button></div>';
@@ -519,6 +521,7 @@ const App = {
         <div><h2>${team.name}</h2><p style="color:var(--muted);font-size:.85rem;margin:4px 0 0;">Temporada ${team.season}</p></div>
         <div class="row">
           <button class="btn btn-outline" onclick="App.goLibrary()">📚 Biblioteca</button>
+          ${sessions && sessions.length ? `<button class="btn btn-outline" onclick='App.goAttendanceSummary()'>📊 Asistencia</button>` : ''}
           ${this.canManage() ? `<button class="btn btn-primary" onclick="App.openSessionBuilder(null)">+ Nueva sesión</button>` : ''}
         </div>
       </div>`;
@@ -762,12 +765,17 @@ const App = {
       .select('*, exercises(name, category, description, diagram_urls)')
       .eq('session_id', sess.id).order('sort_order');
     if(e2) throw e2;
+    const { data: attendance } = await client.from('session_attendance').select('status').eq('session_id', sess.id);
 
     const totalMin = (items||[]).reduce((s,i)=> s+(i.duration_minutes||0), 0);
+    const attCounts = { presente:0, ausente:0, justificado:0, lesionado:0 };
+    (attendance||[]).forEach(a=>{ if(attCounts[a.status]!=null) attCounts[a.status]++; });
+    const attTaken = (attendance||[]).length > 0;
 
     let html = `<div class="crumb no-print" onclick='App.goTeam(${JSON.stringify(this.currentTeam)})'>← ${this.currentTeam.name}</div>
       <div class="toolbar no-print">
         ${this.canManage() ? `<button class="btn btn-outline" onclick="App.openSessionBuilder('${sess.id}')">✏️ Editar</button>` : ''}
+        ${this.canManage() ? `<button class="btn btn-outline" onclick="App.openAttendanceModal('${sess.id}')">📋 ${attTaken ? 'Editar asistencia' : 'Pasar lista'}</button>` : ''}
         ${this.canManage() ? `<button class="btn btn-outline" onclick="App.duplicateSession('${sess.id}')">🔁 Duplicar como plantilla</button>` : ''}
         ${this.canManage() ? `<button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="App.deleteSession('${sess.id}')">🗑️ Eliminar</button>` : ''}
         <button class="btn btn-outline" onclick="window.print()">Imprimir / PDF</button>
@@ -776,6 +784,16 @@ const App = {
       <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">
         ${this.currentTeam.name} · ${sess.session_date} · ${(items||[]).length} ejercicios · ${totalMin} min total
       </p>`;
+
+    if(attTaken){
+      html += `<div class="card no-print" style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+        <strong style="font-size:.85rem;">Asistencia:</strong>
+        <span class="pill" style="background:#dcfce7;color:#166534;">✅ ${attCounts.presente} presentes</span>
+        <span class="pill" style="background:#fee2e2;color:#b91c1c;">❌ ${attCounts.ausente} ausentes</span>
+        <span class="pill" style="background:#fef3c7;color:#92400e;">📄 ${attCounts.justificado} justificados</span>
+        <span class="pill" style="background:#e0e7ff;color:#3730a3;">🤕 ${attCounts.lesionado} lesionados</span>
+      </div>`;
+    }
 
     if(sess.notes){
       html += `<div class="card"><h3 style="margin-bottom:6px;font-size:.9rem;">Notas</h3><p style="font-size:.88rem;">${sess.notes}</p></div>`;
@@ -803,6 +821,160 @@ const App = {
         }
       });
     }
+    document.getElementById('app').innerHTML = html;
+  },
+
+  ATTENDANCE_OPTIONS: [
+    { value:'presente', label:'Presente', color:'#22c55e' },
+    { value:'ausente', label:'Ausente', color:'#ef4444' },
+    { value:'justificado', label:'Justificado', color:'#f59e0b' },
+    { value:'lesionado', label:'Lesionado', color:'#6366f1' },
+  ],
+
+  async openAttendanceModal(sessionId){
+    if(!this.requireCanManage()) return;
+    const { data: players, error: e1 } = await client.from('players')
+      .select('*').eq('team_id', this.currentTeam.id).eq('active', true).order('number', { ascending:true, nullsFirst:false });
+    if(e1) return alert('Error: '+e1.message);
+    const { data: existing, error: e2 } = await client.from('session_attendance').select('*').eq('session_id', sessionId);
+    if(e2) return alert('Error: '+e2.message);
+
+    this._attendanceSessionId = sessionId;
+    this._attendanceState = {};
+    (existing||[]).forEach(a=>{ this._attendanceState[a.player_id] = { status:a.status, notes:a.notes||'' }; });
+    this._attendancePlayers = players || [];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'attendanceModalOverlay';
+    overlay.innerHTML = `
+      <div class="modal-box" style="max-width:480px;">
+        <h3>Pasar lista</h3>
+        <div id="attendanceListWrap">${this.renderAttendanceList()}</div>
+        <div class="row" style="margin-top:20px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="App.closeAttendanceModal()">Cancelar</button>
+          <button class="btn btn-primary" id="attendanceSaveBtn" style="flex:1;" onclick="App.saveAttendance()">Guardar asistencia</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  },
+
+  closeAttendanceModal(){
+    const el = document.getElementById('attendanceModalOverlay');
+    if(el) el.remove();
+  },
+
+  renderAttendanceList(){
+    if(this._attendancePlayers.length===0){
+      return `<div style="color:var(--muted);font-size:.85rem;padding:12px 0;">Este equipo no tiene jugadores activos todavía.</div>`;
+    }
+    return this._attendancePlayers.map(p=>{
+      const current = this._attendanceState[p.id] || {};
+      const showNotes = current.status==='justificado' || current.status==='lesionado';
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--line);">
+        <div style="font-weight:600;font-size:.85rem;margin-bottom:6px;">${p.number!=null ? `#${p.number} ` : ''}${p.full_name}</div>
+        <div class="row" style="gap:6px;">
+          ${this.ATTENDANCE_OPTIONS.map(opt=>`
+            <button class="btn-sm" type="button"
+              style="border:2px solid ${current.status===opt.value ? opt.color : 'var(--line)'}; background:${current.status===opt.value ? opt.color+'22' : '#fff'}; color:${current.status===opt.value ? opt.color : 'var(--ink)'}; border-radius:8px; cursor:pointer; font-weight:600;"
+              onclick="App.setAttendanceStatus('${p.id}','${opt.value}')">${opt.label}</button>
+          `).join('')}
+        </div>
+        ${showNotes ? `<input type="text" placeholder="Motivo (opcional)" value="${current.notes||''}" style="margin-top:6px;font-size:.8rem;padding:7px 9px;" oninput="App.setAttendanceNotes('${p.id}', this.value)">` : ''}
+      </div>`;
+    }).join('');
+  },
+
+  setAttendanceStatus(playerId, status){
+    const current = this._attendanceState[playerId] || {};
+    // pinchar dos veces en la misma opción la desmarca
+    this._attendanceState[playerId] = current.status===status
+      ? { status:null, notes:current.notes||'' }
+      : { status, notes:current.notes||'' };
+    document.getElementById('attendanceListWrap').innerHTML = this.renderAttendanceList();
+  },
+
+  setAttendanceNotes(playerId, value){
+    if(!this._attendanceState[playerId]) this._attendanceState[playerId] = { status:null, notes:'' };
+    this._attendanceState[playerId].notes = value;
+  },
+
+  async saveAttendance(){
+    const btn = document.getElementById('attendanceSaveBtn');
+    btn.disabled = true; btn.textContent = 'Guardando...';
+
+    const rows = Object.entries(this._attendanceState)
+      .filter(([playerId, v]) => v.status)
+      .map(([playerId, v]) => ({
+        session_id: this._attendanceSessionId, player_id: playerId,
+        status: v.status, notes: v.notes || null
+      }));
+
+    // borra lo anterior de esta sesión y guarda el estado actual (más simple y fiable que upsert parcial)
+    const { error: delErr } = await client.from('session_attendance').delete().eq('session_id', this._attendanceSessionId);
+    if(delErr){ btn.disabled=false; btn.textContent='Guardar asistencia'; return alert('Error: '+delErr.message); }
+
+    if(rows.length){
+      const { error: insErr } = await client.from('session_attendance').insert(rows);
+      if(insErr){ btn.disabled=false; btn.textContent='Guardar asistencia'; return alert('Error: '+insErr.message); }
+    }
+
+    btn.disabled = false; btn.textContent = 'Guardar asistencia';
+    this.closeAttendanceModal();
+    this.render();
+  },
+
+  async renderAttendanceSummary(){
+    const team = this.currentTeam;
+    const { data: players, error: e1 } = await client.from('players')
+      .select('*').eq('team_id', team.id).eq('active', true).order('number', { ascending:true, nullsFirst:false });
+    if(e1) throw e1;
+    const { data: sessions, error: e2 } = await client.from('training_sessions').select('id').eq('team_id', team.id);
+    if(e2) throw e2;
+    const sessionIds = (sessions||[]).map(s=>s.id);
+
+    let attendance = [];
+    if(sessionIds.length){
+      const { data, error: e3 } = await client.from('session_attendance').select('*').in('session_id', sessionIds);
+      if(e3) throw e3;
+      attendance = data || [];
+    }
+
+    let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(team)})'>← ${team.name}</div>
+      <h2>Asistencia</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">
+        ${team.name} · ${sessionIds.length} sesión(es) con posibilidad de asistencia registrada
+      </p>`;
+
+    if(!players || players.length===0){
+      html += `<div class="empty">Este equipo no tiene jugadores activos.</div>`;
+      document.getElementById('app').innerHTML = html;
+      return;
+    }
+
+    players.forEach(p=>{
+      const own = attendance.filter(a=>a.player_id===p.id);
+      const counts = { presente:0, ausente:0, justificado:0, lesionado:0 };
+      own.forEach(a=>{ if(counts[a.status]!=null) counts[a.status]++; });
+      const totalTaken = own.length;
+      const pct = totalTaken>0 ? Math.round((counts.presente/totalTaken)*100) : null;
+      const pctColor = pct===null ? 'var(--muted)' : pct>=80 ? '#16a34a' : pct>=60 ? '#b45309' : '#dc2626';
+
+      html += `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-weight:700;">${p.number!=null ? `#${p.number} ` : ''}${p.full_name}</div>
+          <div style="font-weight:800;font-size:1.1rem;color:${pctColor};">${pct===null ? '—' : pct+'%'}</div>
+        </div>
+        ${totalTaken>0 ? `<div class="row" style="margin-top:10px;">
+          <span class="pill" style="background:#dcfce7;color:#166534;">✅ ${counts.presente}</span>
+          <span class="pill" style="background:#fee2e2;color:#b91c1c;">❌ ${counts.ausente}</span>
+          <span class="pill" style="background:#fef3c7;color:#92400e;">📄 ${counts.justificado}</span>
+          <span class="pill" style="background:#e0e7ff;color:#3730a3;">🤕 ${counts.lesionado}</span>
+          <span style="color:var(--muted);font-size:.78rem;align-self:center;">de ${totalTaken} sesión(es) con lista pasada</span>
+        </div>` : `<p style="color:var(--muted);font-size:.8rem;margin-top:8px;">Todavía no hay asistencia registrada para este jugador.</p>`}
+      </div>`;
+    });
+
     document.getElementById('app').innerHTML = html;
   },
 
