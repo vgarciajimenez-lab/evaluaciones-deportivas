@@ -286,7 +286,9 @@ const App = {
     const cat = this.libraryCategoryFilter || 'all';
     const filtered = this._libraryExercises
       .filter(e=> cat==='all' || e.category===cat)
-      .filter(e=> !q || e.name.toLowerCase().includes(q));
+      .filter(e=> !q || e.name.toLowerCase().includes(q))
+      .slice()
+      .sort((a,b)=> a.name.localeCompare(b.name, 'es', { sensitivity:'base' }));
 
     let html = `<div class="crumb" onclick="App.goTeams()">← Equipos</div>
       <div class="section-title"><h2>📚 Biblioteca de ejercicios</h2>
@@ -301,20 +303,36 @@ const App = {
 
     if(filtered.length===0){
       html += `<div class="empty"><div class="big">📚</div>No hay ejercicios que coincidan.</div>`;
+    } else if(cat !== 'all'){
+      // Ya filtrado a una sola categoría: lista plana, alfabética
+      html += this.buildExerciseGrid(filtered);
     } else {
-      html += `<div class="grid-cards">`;
-      filtered.forEach(ex=>{
-        html += `<div class="ex-card" onclick='App.openExerciseViewModal(${JSON.stringify(ex)})'>
-          <div class="thumb">${(ex.diagram_urls && ex.diagram_urls.length) ? `<img src="${ex.diagram_urls[0]}">${ex.diagram_urls.length>1 ? `<span class="count-badge">+${ex.diagram_urls.length-1}</span>` : ''}` : '🏀'}</div>
-          <div class="body">
-            <div class="name">${ex.name}</div>
-            <div class="meta">${ex.category||'Sin categoría'}${ex.duration_minutes?` · ${ex.duration_minutes} min`:''}</div>
-          </div>
-        </div>`;
+      // Sin filtro de categoría: agrupado por categoría (en el orden habitual),
+      // y alfabético dentro de cada grupo. Los ejercicios sin categoría van al final.
+      const groups = [...CATEGORIES, null];
+      groups.forEach(groupCat=>{
+        const inGroup = filtered.filter(ex => (ex.category || null) === groupCat);
+        if(inGroup.length===0) return;
+        html += `<div class="section-title" style="margin:24px 0 10px;"><h2 style="font-size:.95rem;">${groupCat || 'Sin categoría'}</h2></div>`;
+        html += this.buildExerciseGrid(inGroup);
       });
-      html += `</div>`;
     }
     document.getElementById('app').innerHTML = html;
+  },
+
+  buildExerciseGrid(list){
+    let html = `<div class="grid-cards">`;
+    list.forEach(ex=>{
+      html += `<div class="ex-card" onclick='App.openExerciseViewModal(${JSON.stringify(ex)})'>
+        <div class="thumb">${(ex.diagram_urls && ex.diagram_urls.length) ? `<img src="${ex.diagram_urls[0]}">${ex.diagram_urls.length>1 ? `<span class="count-badge">+${ex.diagram_urls.length-1}</span>` : ''}` : '🏀'}</div>
+        <div class="body">
+          <div class="name">${ex.name}</div>
+          <div class="meta">${ex.category||'Sin categoría'}${ex.duration_minutes?` · ${ex.duration_minutes} min`:''}</div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+    return html;
   },
 
   canEditExercise(exercise){
