@@ -309,19 +309,26 @@ const App = {
     const editable = this.canEditExercise(exercise);
     const images = exercise.diagram_urls && exercise.diagram_urls.length ? exercise.diagram_urls : [];
 
+    let galleryHtml = '';
+    if(images.length === 1){
+      galleryHtml = `<img src="${images[0]}" style="width:100%;max-height:420px;object-fit:contain;background:#f0ede3;border-radius:10px;margin-bottom:14px;">`;
+    } else if(images.length > 1){
+      galleryHtml = `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        ${images.map(url=>`<img src="${url}" style="width:calc(50% - 5px);height:220px;object-fit:contain;background:#f0ede3;border-radius:10px;">`).join('')}
+      </div>`;
+    }
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.id = 'exerciseViewOverlay';
     overlay.innerHTML = `
-      <div class="modal-box" style="max-width:520px;">
+      <div class="modal-box" style="max-width:720px;">
         <h3 style="margin-bottom:4px;">${exercise.name}</h3>
         <div class="row" style="margin-bottom:14px;">
           ${exercise.category ? `<span class="pill">${exercise.category}</span>` : ''}
           ${exercise.duration_minutes ? `<span class="pill">${exercise.duration_minutes} min</span>` : ''}
         </div>
-        ${images.length ? `<div class="diagram-gallery" style="margin-bottom:14px;">
-          ${images.map(url=>`<div class="thumb-wrap" style="width:130px;height:130px;"><img src="${url}"></div>`).join('')}
-        </div>` : ''}
+        ${galleryHtml}
         ${exercise.description ? `<p style="font-size:.9rem;line-height:1.5;white-space:pre-wrap;">${exercise.description}</p>` : `<p style="color:var(--muted);font-size:.85rem;">Sin descripción.</p>`}
         <div class="row" style="margin-top:20px;">
           <button class="btn btn-outline" style="flex:1;" onclick="App.closeExerciseViewModal()">Cerrar</button>
