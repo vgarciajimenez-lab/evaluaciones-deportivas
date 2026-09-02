@@ -82,10 +82,15 @@
   .session-exercise-card{}
   .page-break-marker{display:none;}
   @media print{
-    .session-exercise-card{page-break-inside:avoid;}
+    body{font-size:.9rem;}
+    .session-exercise-card{page-break-inside:avoid;padding:12px;margin-bottom:8px;}
     .page-break-marker{display:block;page-break-after:always;height:0;}
-    .session-ex-gallery img{width:300px;height:300px;}
-    .session-ex-gallery.single img{width:100%;max-height:420px;}
+    .session-ex-gallery{margin-top:6px;gap:6px;}
+    .session-ex-gallery img{width:170px;height:170px;}
+    .session-ex-gallery.single img{width:100%;max-height:260px;}
+    .session-exercise-card p{font-size:.65rem !important; line-height:1.3 !important; margin:4px 0 !important;}
+    .session-exercise-card .ex-card-title{font-size:.78rem !important;}
+    .session-exercise-card .pill{font-size:.58rem !important; padding:1px 6px !important; margin-top:3px !important;}
   }
   .builder-item{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:#fff;}
   .builder-item .idx{width:22px;height:22px;border-radius:50%;background:var(--teal);color:#fff;font-size:.72rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -785,7 +790,7 @@ const App = {
         html += `<div class="card session-exercise-card">
           <div style="display:flex;align-items:center;gap:8px;">
             <div style="width:24px;height:24px;border-radius:50%;background:var(--teal);color:#fff;font-weight:700;font-size:.7rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${idx+1}</div>
-            <div style="font-weight:700;font-size:.85rem;">${ex.name || '(ejercicio eliminado)'} ${it.duration_minutes ? `<span style="color:var(--muted);font-weight:500;font-size:.72rem;">· ${it.duration_minutes} min</span>` : ''}</div>
+            <div class="ex-card-title" style="font-weight:700;font-size:.85rem;">${ex.name || '(ejercicio eliminado)'} ${it.duration_minutes ? `<span style="color:var(--muted);font-weight:500;font-size:.72rem;">· ${it.duration_minutes} min</span>` : ''}</div>
           </div>
           ${ex.category ? `<div class="pill" style="margin-top:6px;font-size:.65rem;padding:2px 8px;">${ex.category}</div>` : ''}
           ${ex.description ? `<p style="font-size:.74rem;line-height:1.4;margin-top:8px;">${ex.description}</p>` : ''}
