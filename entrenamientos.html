@@ -288,7 +288,7 @@ const App = {
     } else {
       html += `<div class="grid-cards">`;
       filtered.forEach(ex=>{
-        html += `<div class="ex-card" onclick='App.openExerciseModal(${JSON.stringify(ex)})'>
+        html += `<div class="ex-card" onclick='App.openExerciseViewModal(${JSON.stringify(ex)})'>
           <div class="thumb">${(ex.diagram_urls && ex.diagram_urls.length) ? `<img src="${ex.diagram_urls[0]}">${ex.diagram_urls.length>1 ? `<span class="count-badge">+${ex.diagram_urls.length-1}</span>` : ''}` : '🏀'}</div>
           <div class="body">
             <div class="name">${ex.name}</div>
@@ -299,6 +299,41 @@ const App = {
       html += `</div>`;
     }
     document.getElementById('app').innerHTML = html;
+  },
+
+  canEditExercise(exercise){
+    return this.isAdmin() || exercise.created_by === this.user.id;
+  },
+
+  openExerciseViewModal(exercise){
+    const editable = this.canEditExercise(exercise);
+    const images = exercise.diagram_urls && exercise.diagram_urls.length ? exercise.diagram_urls : [];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'exerciseViewOverlay';
+    overlay.innerHTML = `
+      <div class="modal-box" style="max-width:520px;">
+        <h3 style="margin-bottom:4px;">${exercise.name}</h3>
+        <div class="row" style="margin-bottom:14px;">
+          ${exercise.category ? `<span class="pill">${exercise.category}</span>` : ''}
+          ${exercise.duration_minutes ? `<span class="pill">${exercise.duration_minutes} min</span>` : ''}
+        </div>
+        ${images.length ? `<div class="diagram-gallery" style="margin-bottom:14px;">
+          ${images.map(url=>`<div class="thumb-wrap" style="width:130px;height:130px;"><img src="${url}"></div>`).join('')}
+        </div>` : ''}
+        ${exercise.description ? `<p style="font-size:.9rem;line-height:1.5;white-space:pre-wrap;">${exercise.description}</p>` : `<p style="color:var(--muted);font-size:.85rem;">Sin descripción.</p>`}
+        <div class="row" style="margin-top:20px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="App.closeExerciseViewModal()">Cerrar</button>
+          ${editable ? `<button class="btn btn-primary" style="flex:1;" onclick='App.closeExerciseViewModal(); App.openExerciseModal(${JSON.stringify(exercise)})'>✏️ Editar</button>` : ''}
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  },
+
+  closeExerciseViewModal(){
+    const el = document.getElementById('exerciseViewOverlay');
+    if(el) el.remove();
   },
 
   openExerciseModal(exercise){
