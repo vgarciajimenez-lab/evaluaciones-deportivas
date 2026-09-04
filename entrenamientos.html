@@ -4,9 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CanteraPro · Entrenamientos</title>
-<link rel="manifest" href="./manifest.json">
+<link rel="manifest" href="./manifest-entrenamientos.json">
 <meta name="theme-color" content="#111111">
-<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192-entrenamientos.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon-entrenamientos.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Entrenam.">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1036,6 +1041,12 @@ window.addEventListener('beforeunload', (e)=>{
     e.returnValue = '';
   }
 });
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('SW no registrado:', err));
+  });
+}
 </script>
 </body>
 </html>
