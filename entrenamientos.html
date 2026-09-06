@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CanteraPro · Entrenamientos</title>
+<title>HoopYouth · Entrenamientos</title>
 <link rel="manifest" href="./manifest-entrenamientos.json">
 <meta name="theme-color" content="#111111">
 <link rel="icon" type="image/png" sizes="192x192" href="./icon-192-entrenamientos.png">
@@ -119,7 +119,7 @@
 <div class="topbar no-print" id="topbar" style="display:none;">
   <div class="brand">🏋️ Entrenamientos<span id="userEmail"></span><span id="roleTag"></span></div>
   <div class="topbar-right">
-    <a class="applink" href="./index.html">← CanteraPro</a>
+    <a class="applink" href="./index.html">← HoopYouth</a>
     <button onclick="App.logout()">Cerrar sesión</button>
   </div>
 </div>
@@ -237,7 +237,7 @@ const App = {
     document.getElementById('app').innerHTML = `
       <div class="login-wrap">
         <h1>🏋️ Entrenamientos</h1>
-        <p>Inicia sesión para continuar (misma cuenta que CanteraPro)</p>
+        <p>Inicia sesión para continuar (misma cuenta que HoopYouth)</p>
         <div class="card">
           <label>Email</label>
           <input type="email" id="loginEmail" placeholder="tu@email.com">
@@ -259,7 +259,7 @@ const App = {
     let html = `<div class="section-title"><h2>Equipos</h2>
       <button class="btn btn-outline" onclick="App.goLibrary()">📚 Biblioteca de ejercicios</button></div>`;
     if(!teams || teams.length===0){
-      html += `<div class="empty"><div class="big">🏟️</div>No hay equipos todavía. Créalos desde CanteraPro.</div>`;
+      html += `<div class="empty"><div class="big">🏟️</div>No hay equipos todavía. Créalos desde HoopYouth.</div>`;
     } else {
       teams.forEach(t=>{
         html += `<div class="list-item" onclick='App.goTeam(${JSON.stringify(t)})'>

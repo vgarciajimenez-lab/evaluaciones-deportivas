@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CanteraPro</title>
+<title>HoopYouth</title>
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#111111">
 <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="CanteraPro">
+<meta name="apple-mobile-web-app-title" content="HoopYouth">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -184,7 +184,7 @@
 </head>
 <body>
 <div class="topbar no-print" id="topbar" style="display:none;">
-  <div class="brand">CanteraPro<span id="userEmail"></span><span id="roleTag"></span></div>
+  <div class="brand">HoopYouth<span id="userEmail"></span><span id="roleTag"></span></div>
   <div style="display:flex;align-items:center;gap:10px;">
     <a href="./entrenamientos.html" style="color:#fff;opacity:.8;text-decoration:none;font-size:.82rem;border:1px solid rgba(255,255,255,.35);padding:7px 12px;border-radius:100px;">🏋️ Entrenamientos</a>
     <button onclick="App.logout()">Cerrar sesión</button>
@@ -350,7 +350,7 @@ const App = {
   renderLogin(){
     document.getElementById('app').innerHTML = `
       <div class="login-wrap">
-        <h1>🏀 CanteraPro</h1>
+        <h1>🏀 HoopYouth</h1>
         <p>Inicia sesión para continuar</p>
         <div class="card">
           <label>Email</label>
@@ -458,7 +458,7 @@ const App = {
       const tables = ['teams','players','coaches','evaluation_templates','scale_levels',
                        'categories','criteria','evaluations','evaluation_scores',
                        'profiles','exercises','training_sessions','session_exercises','session_attendance'];
-      const backup = { generated_at: new Date().toISOString(), app: 'CanteraPro' };
+      const backup = { generated_at: new Date().toISOString(), app: 'HoopYouth' };
       for(const t of tables){
         const { data, error } = await client.from(t).select('*');
         if(error){ alert(`Error exportando la tabla ${t}: ${error.message}`); if(btn){ btn.disabled=false; btn.textContent='💾 Copia de seguridad'; } return; }
