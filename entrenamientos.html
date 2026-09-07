@@ -376,7 +376,13 @@ const App = {
     try{
       if(error && error.context && typeof error.context.json === 'function'){
         const body = await error.context.json();
-        if(body && body.error) return body.error;
+        if(body){
+          let parts = [];
+          if(body.error) parts.push(body.error);
+          if(body.hoopboard_response_body) parts.push('Respuesta de HoopBoard:\n'+body.hoopboard_response_body);
+          if(body.sent_payload) parts.push('Datos enviados:\n'+JSON.stringify(body.sent_payload, null, 2));
+          if(parts.length) return parts.join('\n\n');
+        }
       }
       if(error && error.context && typeof error.context.text === 'function'){
         const text = await error.context.text();
