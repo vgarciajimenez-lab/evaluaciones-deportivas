@@ -84,6 +84,8 @@
   .session-ex-gallery{display:flex;gap:10px;flex-wrap:wrap;flex-shrink:0;margin-top:12px;}
   .session-ex-gallery img{width:260px;height:260px;object-fit:contain;background:#f0ede3;border-radius:8px;border:1px solid var(--line);}
   .session-ex-gallery.single img{width:100%;height:auto;max-height:380px;}
+  .session-ex-gallery .frame-box{width:260px;height:260px;background:#f0ede3;border-radius:8px;border:1px solid var(--line);}
+  .session-ex-gallery.single .frame-box{width:100%;height:auto;max-height:380px;}
   .session-exercise-card{}
   .page-break-marker{display:none;}
   @media print{
@@ -93,6 +95,8 @@
     .session-ex-gallery{margin-top:6px;gap:6px;}
     .session-ex-gallery img{width:170px;height:170px;}
     .session-ex-gallery.single img{width:100%;max-height:260px;}
+    .session-ex-gallery .frame-box{width:170px;height:170px;}
+    .session-ex-gallery.single .frame-box{width:100%;max-height:260px;}
     .session-exercise-card p{font-size:.65rem !important; line-height:1.3 !important; margin:4px 0 !important;}
     .session-exercise-card .ex-card-title{font-size:.78rem !important;}
     .session-exercise-card .pill{font-size:.58rem !important; padding:1px 6px !important; margin-top:3px !important;}
@@ -343,8 +347,17 @@ const App = {
   buildExerciseGrid(list){
     let html = `<div class="grid-cards">`;
     list.forEach(ex=>{
+      let thumbInner;
+      if(ex.diagram_urls && ex.diagram_urls.length){
+        thumbInner = `<img src="${ex.diagram_urls[0]}">${ex.diagram_urls.length>1 ? `<span class="count-badge">+${ex.diagram_urls.length-1}</span>` : ''}`;
+      } else if(ex.hoopboard_frames && ex.hoopboard_frames.length){
+        const svg = this.renderCourtFrameSVG(ex.hoopboard_frames[0]);
+        thumbInner = svg || '🏀';
+      } else {
+        thumbInner = '🏀';
+      }
       html += `<div class="ex-card" onclick='App.openExerciseViewModal(${JSON.stringify(ex)})'>
-        <div class="thumb">${(ex.diagram_urls && ex.diagram_urls.length) ? `<img src="${ex.diagram_urls[0]}">${ex.diagram_urls.length>1 ? `<span class="count-badge">+${ex.diagram_urls.length-1}</span>` : ''}` : '🏀'}</div>
+        <div class="thumb">${thumbInner}</div>
         <div class="body">
           <div class="name">${ex.name}</div>
           <div class="meta">${ex.category||'Sin categoría'}${ex.duration_minutes?` · ${ex.duration_minutes} min`:''}</div>
@@ -430,6 +443,10 @@ const App = {
     } else if(images.length > 1){
       galleryHtml = `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
         ${images.map(url=>`<img src="${url}" style="width:calc(50% - 5px);height:220px;object-fit:contain;background:#f0ede3;border-radius:10px;">`).join('')}
+      </div>`;
+    } else if(exercise.hoopboard_frames && exercise.hoopboard_frames.length){
+      galleryHtml = `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        ${this.hoopBoardFramesHtml(exercise.hoopboard_frames, 'width:220px;height:220px;border-radius:10px;border:1px solid var(--line);')}
       </div>`;
     }
 
@@ -534,6 +551,104 @@ const App = {
   removeNewFile(idx){
     this._exModalNewFiles.splice(idx, 1);
     this.refreshExGallery();
+  },
+
+  // ---------- Dibujo automático de diagramas de HoopBoard (a partir de "frames") ----------
+  // No dependemos de ninguna imagen: se dibuja el campo con jugadores, balón,
+  // líneas y textos directamente a partir de las coordenadas que trae HoopBoard.
+  renderCourtFrameSVG(frame){
+    if(!frame) return null;
+    const pts = [];
+    (frame.players||[]).forEach(p=> pts.push([p.x, p.y]));
+    (frame.lines||[]).forEach(l=>{
+      const linePts = l.points || l.path || [];
+      linePts.forEach(pt=> pt && pts.push([pt.x, pt.y]));
+      if(l.from) pts.push([l.from.x, l.from.y]);
+      if(l.to) pts.push([l.to.x, l.to.y]);
+    });
+    (frame.texts||[]).forEach(t=> pts.push([t.x, t.y]));
+    (frame.equipment||[]).forEach(e=> pts.push([e.x, e.y]));
+    if(pts.length===0) return null;
+
+    const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
+    const pad = 40;
+    const minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad;
+    const minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad;
+    const w = Math.max(1, maxX - minX), h = Math.max(1, maxY - minY);
+    const markerId = 'arrow-' + (frame.id || Math.random().toString(36).slice(2));
+
+    let svg = `<svg viewBox="${minX} ${minY} ${w} ${h}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="${markerId}" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><polygon points="0 0, 8 4, 0 8" fill="#0f4c5c"/></marker></defs>
+      <rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="#f0ede3"/>`;
+
+    // Líneas (pases, cortes, bloqueos...) — se dibujan si el formato es reconocible;
+    // si no lo es, simplemente no se pintan (no rompe el resto del dibujo).
+    (frame.lines||[]).forEach(l=>{
+      try{
+        const linePts = l.points || l.path;
+        const dashed = l.dashed || l.type==='cut' || l.style==='dashed';
+        const color = l.color || '#0f4c5c';
+        if(linePts && linePts.length>=2){
+          const d = linePts.map((pt,i)=> (i===0?'M':'L')+pt.x+','+pt.y).join(' ');
+          svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2.5" ${dashed?'stroke-dasharray="6,5"':''} marker-end="url(#${markerId})"/>`;
+        } else if(l.from && l.to){
+          svg += `<line x1="${l.from.x}" y1="${l.from.y}" x2="${l.to.x}" y2="${l.to.y}" stroke="${color}" stroke-width="2.5" ${dashed?'stroke-dasharray="6,5"':''} marker-end="url(#${markerId})"/>`;
+        }
+      }catch(e){ /* formato no reconocido, se omite esta línea */ }
+    });
+
+    // Material (conos, etc.)
+    (frame.equipment||[]).forEach(e=>{
+      try{ svg += `<rect x="${e.x-6}" y="${e.y-6}" width="12" height="12" fill="#f59e0b" rx="2"/>`; }catch(err){}
+    });
+
+    // Jugadores: ataque en azul oscuro relleno, defensa en blanco con borde rojo
+    const ballHolders = new Set(frame.ballHolderIds||[]);
+    (frame.players||[]).forEach(p=>{
+      try{
+        const isDefense = p.role==='defense';
+        const fill = isDefense ? '#ffffff' : '#0f4c5c';
+        const stroke = isDefense ? '#dc2626' : '#0a3540';
+        const textColor = isDefense ? '#dc2626' : '#ffffff';
+        svg += `<circle cx="${p.x}" cy="${p.y}" r="16" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>`;
+        svg += `<text x="${p.x}" y="${p.y+5}" text-anchor="middle" font-size="13" font-weight="700" fill="${textColor}" font-family="Arial, sans-serif">${p.label||''}</text>`;
+        if(ballHolders.has(p.id)){
+          svg += `<circle cx="${p.x+20}" cy="${p.y-18}" r="7" fill="#f97316" stroke="#111" stroke-width="1"/>`;
+          svg += `<line x1="${p.x+20}" y1="${p.y-25}" x2="${p.x+20}" y2="${p.y-11}" stroke="#111" stroke-width="0.8"/>`;
+          svg += `<line x1="${p.x+13}" y1="${p.y-18}" x2="${p.x+27}" y2="${p.y-18}" stroke="#111" stroke-width="0.8"/>`;
+        }
+      }catch(e){ /* jugador con datos incompletos, se omite */ }
+    });
+
+    // Textos sueltos de la pizarra
+    (frame.texts||[]).forEach(t=>{
+      try{
+        const content = t.text || t.content || t.label || '';
+        if(content) svg += `<text x="${t.x}" y="${t.y}" font-size="12" fill="#132a2e" font-family="Arial, sans-serif">${content}</text>`;
+      }catch(e){}
+    });
+
+    svg += `</svg>`;
+    return svg;
+  },
+
+  // Envuelve uno o varios "frames" en cajas (mismo estilo visual que las fotos
+  // subidas a mano), con la etiqueta "Frame N" si hay más de uno.
+  // Si useClass=true, boxStyleOrClass se aplica como clase CSS (útil para que
+  // el tamaño se pueda reducir en la impresión, igual que con las fotos).
+  hoopBoardFramesHtml(frames, boxStyleOrClass, useClass){
+    if(!frames || !Array.isArray(frames) || frames.length===0) return '';
+    let html = '';
+    frames.forEach((f,i)=>{
+      const svg = this.renderCourtFrameSVG(f);
+      if(!svg) return;
+      const boxAttrs = useClass ? `class="${boxStyleOrClass}"` : `style="${boxStyleOrClass}overflow:hidden;"`;
+      html += `<div style="text-align:center;">
+        <div ${boxAttrs}>${svg}</div>
+        ${frames.length>1 ? `<div style="font-size:.68rem;color:var(--muted);margin-top:3px;">Frame ${i+1}</div>` : ''}
+      </div>`;
+    });
+    return html;
   },
 
   compressImage(file, maxDim=900, quality=0.82){
@@ -864,7 +979,7 @@ const App = {
     const { data: sess, error } = await client.from('training_sessions').select('*').eq('id', this.currentSessionId).single();
     if(error) throw error;
     const { data: items, error: e2 } = await client.from('session_exercises')
-      .select('*, exercises(name, category, description, diagram_urls)')
+      .select('*, exercises(name, category, description, diagram_urls, hoopboard_frames)')
       .eq('session_id', sess.id).order('sort_order');
     if(e2) throw e2;
     const { data: attendance } = await client.from('session_attendance').select('status').eq('session_id', sess.id);
@@ -907,6 +1022,14 @@ const App = {
       items.forEach((it,idx)=>{
         const ex = it.exercises || {};
         const imgCount = ex.diagram_urls ? ex.diagram_urls.length : 0;
+        const frames = (!imgCount && ex.hoopboard_frames) ? ex.hoopboard_frames : [];
+        let mediaHtml = '';
+        if(imgCount){
+          mediaHtml = `<div class="session-ex-gallery${imgCount===1?' single':''}">${ex.diagram_urls.map(url=>`<img src="${url}">`).join('')}</div>`;
+        } else if(frames.length){
+          const single = frames.length===1;
+          mediaHtml = `<div class="session-ex-gallery${single?' single':''}">${this.hoopBoardFramesHtml(frames, 'frame-box', true)}</div>`;
+        }
         html += `<div class="card session-exercise-card">
           <div style="display:flex;align-items:center;gap:8px;">
             <div style="width:24px;height:24px;border-radius:50%;background:var(--teal);color:#fff;font-weight:700;font-size:.7rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${idx+1}</div>
@@ -915,7 +1038,7 @@ const App = {
           ${ex.category ? `<div class="pill" style="margin-top:6px;font-size:.65rem;padding:2px 8px;">${ex.category}</div>` : ''}
           ${ex.description ? `<p style="font-size:.74rem;line-height:1.4;margin-top:8px;">${ex.description}</p>` : ''}
           ${it.notes ? `<p style="font-size:.68rem;color:var(--muted);margin-top:6px;">Nota: ${it.notes}</p>` : ''}
-          ${imgCount ? `<div class="session-ex-gallery${imgCount===1?' single':''}">${ex.diagram_urls.map(url=>`<img src="${url}">`).join('')}</div>` : ''}
+          ${mediaHtml}
         </div>`;
         // salto de página cada 2 ejercicios (solo afecta a la impresión/PDF)
         if((idx+1) % 2 === 0 && idx !== items.length-1){
