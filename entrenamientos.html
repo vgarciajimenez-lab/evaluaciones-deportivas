@@ -301,7 +301,10 @@ const App = {
 
     let html = `<div class="crumb" onclick="App.goTeams()">← Equipos</div>
       <div class="section-title"><h2>📚 Biblioteca de ejercicios</h2>
-      ${this.canManage() ? `<button class="btn btn-primary" onclick="App.openExerciseModal(null)">+ Nuevo ejercicio</button>` : ''}</div>
+      <div class="row">
+        ${this.canManage() ? `<button class="btn btn-outline" id="syncPullBtn" onclick="App.syncPullFromHoopBoard()">🔄 Traer de HoopBoard</button>` : ''}
+        ${this.canManage() ? `<button class="btn btn-primary" onclick="App.openExerciseModal(null)">+ Nuevo ejercicio</button>` : ''}
+      </div></div>
       <div class="search-row">
         <input type="text" placeholder="Buscar por nombre..." value="${this.libraryFilter||''}" oninput="App.onLibraryFilterChange('text', this.value)">
         <select class="cat-select" onchange="App.onLibraryFilterChange('category', this.value)">
@@ -352,6 +355,44 @@ const App = {
     return html;
   },
 
+  async syncPullFromHoopBoard(){
+    if(!this.requireCanManage()) return;
+    const btn = document.getElementById('syncPullBtn');
+    if(btn){ btn.disabled = true; btn.textContent = '🔄 Sincronizando...'; }
+    try{
+      const { data, error } = await client.functions.invoke('hoopboard-sync', { body: { action: 'pull' } });
+      if(error){
+        alert('No se pudo sincronizar con HoopBoard: '+error.message);
+        return;
+      }
+      if(data && data.error){
+        alert('HoopBoard respondió con un error: '+data.error);
+        return;
+      }
+      alert(`Sincronización completada.\n\nNuevos: ${data.imported}\nActualizados: ${data.updated}\nOmitidos (ya eran tuyos): ${data.skipped}`);
+      this.renderLibrary();
+    }catch(e){
+      alert('Error al conectar con la función de sincronización: '+e.message);
+    }finally{
+      if(btn){ btn.disabled = false; btn.textContent = '🔄 Traer de HoopBoard'; }
+    }
+  },
+
+  async syncPushToHoopBoard(exerciseId, btn){
+    if(!this.requireCanManage()) return;
+    if(btn){ btn.disabled = true; btn.textContent = 'Enviando...'; }
+    try{
+      const { data, error } = await client.functions.invoke('hoopboard-sync', { body: { action: 'push', exercise_id: exerciseId } });
+      if(error){ alert('No se pudo enviar a HoopBoard: '+error.message); return; }
+      if(data && data.error){ alert('HoopBoard respondió con un error: '+data.error); return; }
+      alert('Ejercicio enviado a HoopBoard correctamente.');
+      this.closeExerciseViewModal();
+      this.renderLibrary();
+    }catch(e){
+      alert('Error al conectar con la función de sincronización: '+e.message);
+    }
+  },
+
   canEditExercise(exercise){
     return this.isAdmin() || exercise.created_by === this.user.id;
   },
@@ -381,6 +422,9 @@ const App = {
         </div>
         ${galleryHtml}
         ${exercise.description ? `<p style="font-size:.9rem;line-height:1.5;white-space:pre-wrap;">${exercise.description}</p>` : `<p style="color:var(--muted);font-size:.85rem;">Sin descripción.</p>`}
+        ${exercise.hoopboard_id
+          ? `<p style="margin-top:10px;"><span class="pill" style="background:#dcfce7;color:#166534;">✅ Sincronizado con HoopBoard</span></p>`
+          : (this.canManage() ? `<button class="btn btn-outline" style="margin-top:10px;" onclick="App.syncPushToHoopBoard('${exercise.id}', this)">📤 Enviar a HoopBoard</button>` : '')}
         <div class="row" style="margin-top:20px;">
           <button class="btn btn-outline" style="flex:1;" onclick="App.closeExerciseViewModal()">Cerrar</button>
           ${editable ? `<button class="btn btn-primary" style="flex:1;" onclick='App.closeExerciseViewModal(); App.openExerciseModal(${JSON.stringify(exercise)})'>✏️ Editar</button>` : ''}
