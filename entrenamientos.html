@@ -355,6 +355,24 @@ const App = {
     return html;
   },
 
+  // La librería de Supabase, cuando la función devuelve un error, solo da un
+  // mensaje genérico ("Edge Function returned a non-2xx status code"). El
+  // motivo real va dentro de la respuesta — lo extraemos aquí para poder
+  // mostrarlo tal cual.
+  async extractFunctionErrorDetail(error){
+    try{
+      if(error && error.context && typeof error.context.json === 'function'){
+        const body = await error.context.json();
+        if(body && body.error) return body.error;
+      }
+      if(error && error.context && typeof error.context.text === 'function'){
+        const text = await error.context.text();
+        if(text) return text;
+      }
+    }catch(e){ /* si no se puede leer, usamos el mensaje genérico */ }
+    return error ? error.message : 'Error desconocido';
+  },
+
   async syncPullFromHoopBoard(){
     if(!this.requireCanManage()) return;
     const btn = document.getElementById('syncPullBtn');
@@ -362,7 +380,8 @@ const App = {
     try{
       const { data, error } = await client.functions.invoke('hoopboard-sync', { body: { action: 'pull' } });
       if(error){
-        alert('No se pudo sincronizar con HoopBoard: '+error.message);
+        const detail = await this.extractFunctionErrorDetail(error);
+        alert('No se pudo sincronizar con HoopBoard:\n\n'+detail);
         return;
       }
       if(data && data.error){
@@ -383,7 +402,11 @@ const App = {
     if(btn){ btn.disabled = true; btn.textContent = 'Enviando...'; }
     try{
       const { data, error } = await client.functions.invoke('hoopboard-sync', { body: { action: 'push', exercise_id: exerciseId } });
-      if(error){ alert('No se pudo enviar a HoopBoard: '+error.message); return; }
+      if(error){
+        const detail = await this.extractFunctionErrorDetail(error);
+        alert('No se pudo enviar a HoopBoard:\n\n'+detail);
+        return;
+      }
       if(data && data.error){ alert('HoopBoard respondió con un error: '+data.error); return; }
       alert('Ejercicio enviado a HoopBoard correctamente.');
       this.closeExerciseViewModal();
