@@ -307,8 +307,8 @@ const App = {
       <div class="section-title"><h2>📚 Biblioteca de ejercicios</h2>
       <div class="row">
         ${this.canManage() ? `<button class="btn btn-outline" id="syncPullBtn" onclick="App.syncPullFromHoopBoard()">🔄 Traer de HoopBoard</button>` : ''}
-        ${this.canManage() ? `<button class="btn btn-primary" onclick="App.openExerciseModal(null)">+ Nuevo ejercicio</button>` : ''}
       </div></div>
+      <p style="color:var(--muted);font-size:.78rem;margin:-6px 0 14px;">Los ejercicios se crean en HoopBoard y se traen aquí sincronizados. Puedes editar los que ya tengas.</p>
       <div class="search-row">
         <input type="text" placeholder="Buscar por nombre..." value="${this.libraryFilter||''}" oninput="App.onLibraryFilterChange('text', this.value)">
         <select class="cat-select" onchange="App.onLibraryFilterChange('category', this.value)">
