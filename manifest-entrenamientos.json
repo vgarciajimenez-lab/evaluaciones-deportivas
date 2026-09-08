@@ -1,6 +1,6 @@
 {
-  "name": "HoopYouth Entrenamientos - Cieza E.B.",
-  "short_name": "Entrenam.",
+  "name": "HoopPractice - Cieza E.B.",
+  "short_name": "HoopPractice",
   "description": "Biblioteca de ejercicios y planificador de entrenamientos",
   "start_url": "./entrenamientos.html",
   "scope": "./",

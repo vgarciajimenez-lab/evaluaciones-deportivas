@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HoopYouth · Entrenamientos</title>
+<title>HoopPractice</title>
 <link rel="manifest" href="./manifest-entrenamientos.json">
 <meta name="theme-color" content="#111111">
 <link rel="icon" type="image/png" sizes="192x192" href="./icon-192-entrenamientos.png">
 <link rel="apple-touch-icon" href="./apple-touch-icon-entrenamientos.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Entrenam.">
+<meta name="apple-mobile-web-app-title" content="HoopPractice">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -121,7 +121,7 @@
 </head>
 <body>
 <div class="topbar no-print" id="topbar" style="display:none;">
-  <div class="brand">🏋️ Entrenamientos<span id="userEmail"></span><span id="roleTag"></span></div>
+  <div class="brand">🏋️ HoopPractice<span id="userEmail"></span><span id="roleTag"></span></div>
   <div class="topbar-right">
     <a class="applink" href="./index.html">← HoopYouth</a>
     <button onclick="App.logout()">Cerrar sesión</button>
@@ -240,7 +240,7 @@ const App = {
   renderLogin(){
     document.getElementById('app').innerHTML = `
       <div class="login-wrap">
-        <h1>🏋️ Entrenamientos</h1>
+        <h1>🏋️ HoopPractice</h1>
         <p>Inicia sesión para continuar (misma cuenta que HoopYouth)</p>
         <div class="card">
           <label>Email</label>
