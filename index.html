@@ -577,7 +577,19 @@ const App = {
             <input type="date" id="userExpires-${p.id}" value="${p.expires_at ? p.expires_at.slice(0,10) : ''}">
           </div>
         </div>
-        <p style="font-size:.76rem;color:var(--muted);margin:8px 0 0;">La temporada se rellena sola con la del equipo elegido. Si dejas "Sin equipo", el entrenador podrá crear el suyo propio la primera vez que entre. Deja "Caduca el" en blanco para que el acceso no expire nunca.</p>
+        <div class="row" style="margin-top:14px;align-items:flex-end;">
+          <div style="flex:1;min-width:220px;">
+            <label style="margin-top:0;display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="userHoopboardSync-${p.id}" ${p.hoopboard_sync_enabled!==false?'checked':''} style="width:auto;">
+              Puede sincronizar con HoopBoard
+            </label>
+          </div>
+          <div style="flex:1;min-width:200px;">
+            <label style="margin-top:0;">Límite de ejercicios por categoría (opcional)</label>
+            <input type="number" min="0" id="userExerciseLimit-${p.id}" value="${p.exercise_category_limit!=null ? p.exercise_category_limit : ''}" placeholder="Sin límite">
+          </div>
+        </div>
+        <p style="font-size:.76rem;color:var(--muted);margin:8px 0 0;">La temporada se rellena sola con la del equipo elegido. Si dejas "Sin equipo", el entrenador podrá crear el suyo propio la primera vez que entre. Deja "Caduca el" en blanco para que el acceso no expire nunca. El límite de ejercicios es por cada categoría (ej. 5 = ve como mucho 5 ejercicios de "Bote", 5 de "Tiro", etc.); déjalo en blanco para que vea todos.</p>
         <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="App.saveUserAccess('${p.id}')">Guardar</button>`;
       }
       html += `</div>`;
@@ -613,7 +625,13 @@ const App = {
     const expiresStr = document.getElementById('userExpires-'+userId).value;
     const expires_at = expiresStr ? expiresStr+'T23:59:59' : null; // caduca al final de ese día
 
-    const { error } = await client.from('profiles').update({ role, team_id, season, expires_at }).eq('id', userId);
+    const hoopboard_sync_enabled = document.getElementById('userHoopboardSync-'+userId).checked;
+    const limitStr = document.getElementById('userExerciseLimit-'+userId).value;
+    const exercise_category_limit = limitStr && limitStr.trim()!=='' ? parseInt(limitStr,10) : null;
+
+    const { error } = await client.from('profiles')
+      .update({ role, team_id, season, expires_at, hoopboard_sync_enabled, exercise_category_limit })
+      .eq('id', userId);
     if(error) return alert('Error: '+error.message);
     alert('Guardado correctamente.');
     this.renderUsers();

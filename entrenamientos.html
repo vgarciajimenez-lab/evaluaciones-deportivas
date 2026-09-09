@@ -169,7 +169,7 @@ const App = {
   async loadUserRole(){
     this.accessExpired = false;
     try{
-      const { data, error } = await client.from('profiles').select('role, team_id, season, expires_at').eq('id', this.user.id).single();
+      const { data, error } = await client.from('profiles').select('role, team_id, season, expires_at, hoopboard_sync_enabled, exercise_category_limit').eq('id', this.user.id).single();
       if(!error && data){
         if(data.expires_at && new Date(data.expires_at) < new Date()){
           this.accessExpired = true;
@@ -177,9 +177,11 @@ const App = {
           return;
         }
         this.userRole = data.role; this.userTeamId = data.team_id; this.userSeason = data.season;
+        this.userHoopboardSyncEnabled = data.hoopboard_sync_enabled !== false;
+        this.userExerciseCategoryLimit = data.exercise_category_limit;
       }
-      else { this.userRole = 'viewer'; this.userTeamId = null; this.userSeason = null; }
-    }catch(e){ this.userRole = 'viewer'; this.userTeamId = null; this.userSeason = null; }
+      else { this.userRole = 'viewer'; this.userTeamId = null; this.userSeason = null; this.userHoopboardSyncEnabled = true; this.userExerciseCategoryLimit = null; }
+    }catch(e){ this.userRole = 'viewer'; this.userTeamId = null; this.userSeason = null; this.userHoopboardSyncEnabled = true; this.userExerciseCategoryLimit = null; }
     const tag = document.getElementById('roleTag');
     if(tag){
       if(this.userRole==='viewer') tag.textContent = 'Solo lectura';
@@ -346,7 +348,7 @@ const App = {
     let html = `<div class="crumb" onclick="App.goTeams()">← Equipos</div>
       <div class="section-title"><h2>📚 Biblioteca de ejercicios</h2>
       <div class="row">
-        ${this.canManage() ? `<button class="btn btn-outline" id="syncPullBtn" onclick="App.syncPullFromHoopBoard()">🔄 Traer de HoopBoard</button>` : ''}
+        ${this.canManage() && this.userHoopboardSyncEnabled ? `<button class="btn btn-outline" id="syncPullBtn" onclick="App.syncPullFromHoopBoard()">🔄 Traer de HoopBoard</button>` : ''}
       </div></div>
       <p style="color:var(--muted);font-size:.78rem;margin:-6px 0 14px;">Los ejercicios se crean en HoopBoard y se traen aquí sincronizados. Puedes editar los que ya tengas.</p>
       <div class="search-row">
@@ -360,8 +362,9 @@ const App = {
       </div>`;
 
     if(cat !== 'all' && filtered.length > 0){
+      const exportList = (this.userExerciseCategoryLimit!=null) ? filtered.slice(0, this.userExerciseCategoryLimit) : filtered;
       html += `<div class="toolbar" style="justify-content:flex-start;margin-top:10px;margin-bottom:0;">
-        <button class="btn btn-outline" onclick='App.exportExercisesPDF(${JSON.stringify(filtered)}, ${JSON.stringify(cat)}, ${JSON.stringify(filtered.length+' ejercicios')})'>📄 Exportar "${cat}" a PDF</button>
+        <button class="btn btn-outline" onclick='App.exportExercisesPDF(${JSON.stringify(exportList)}, ${JSON.stringify(cat)}, ${JSON.stringify(exportList.length+' ejercicios')})'>📄 Exportar "${cat}" a PDF</button>
       </div>`;
     }
 
@@ -369,7 +372,12 @@ const App = {
       html += `<div class="empty"><div class="big">📚</div>No hay ejercicios que coincidan.</div>`;
     } else if(cat !== 'all'){
       // Ya filtrado a una sola categoría: lista plana, alfabética
-      html += this.buildExerciseGrid(filtered);
+      const limit = this.userExerciseCategoryLimit;
+      const shown = (limit!=null) ? filtered.slice(0, limit) : filtered;
+      if(limit!=null && filtered.length > shown.length){
+        html += `<p style="color:var(--muted);font-size:.78rem;margin-bottom:10px;">Mostrando ${shown.length} de ${filtered.length} ejercicios de esta categoría.</p>`;
+      }
+      html += this.buildExerciseGrid(shown);
     } else {
       // Sin filtro de categoría: agrupado por categoría (categorías oficiales en su
       // orden habitual, luego cualquier categoría "antigua" que ya no esté en la lista
@@ -379,12 +387,17 @@ const App = {
       const usedExtra = [...new Set(filtered.map(ex => ex.category).filter(c => c && !knownSet.has(c)))]
         .sort((a,b)=> a.localeCompare(b, 'es', { sensitivity:'base' }));
       const groups = [...CATEGORIES, ...usedExtra, null];
+      const limit = this.userExerciseCategoryLimit;
       groups.forEach(groupCat=>{
         const inGroup = filtered.filter(ex => (ex.category || null) === groupCat);
         if(inGroup.length===0) return;
+        const shownGroup = (limit!=null) ? inGroup.slice(0, limit) : inGroup;
         const isLegacy = groupCat && !knownSet.has(groupCat);
         html += `<div class="section-title" style="margin:24px 0 10px;"><h2 style="font-size:.95rem;">${groupCat || 'Sin categoría'}${isLegacy ? ' <span class="pill" style="margin-left:6px;background:#fef3c7;color:#92400e;">categoría antigua</span>' : ''}</h2></div>`;
-        html += this.buildExerciseGrid(inGroup);
+        if(limit!=null && inGroup.length > shownGroup.length){
+          html += `<p style="color:var(--muted);font-size:.78rem;margin:-4px 0 10px;">Mostrando ${shownGroup.length} de ${inGroup.length}.</p>`;
+        }
+        html += this.buildExerciseGrid(shownGroup);
       });
     }
     document.getElementById('app').innerHTML = html;
@@ -673,7 +686,7 @@ const App = {
         ${exercise.description ? `<p style="font-size:.9rem;line-height:1.5;white-space:pre-wrap;">${exercise.description}</p>` : `<p style="color:var(--muted);font-size:.85rem;">Sin descripción.</p>`}
         ${exercise.hoopboard_id
           ? `<p style="margin-top:10px;"><span class="pill" style="background:#dcfce7;color:#166534;">✅ Sincronizado con HoopBoard</span></p>`
-          : (this.canManage() ? `<button class="btn btn-outline" style="margin-top:10px;" onclick="App.syncPushToHoopBoard('${exercise.id}', this)">📤 Enviar a HoopBoard</button>` : '')}
+          : (this.canManage() && this.userHoopboardSyncEnabled ? `<button class="btn btn-outline" style="margin-top:10px;" onclick="App.syncPushToHoopBoard('${exercise.id}', this)">📤 Enviar a HoopBoard</button>` : '')}
         <div class="row" style="margin-top:20px;">
           <button class="btn btn-outline" style="flex:1;" onclick="App.closeExerciseViewModal()">Cerrar</button>
           <button class="btn btn-outline" style="flex:1;" onclick='App.closeExerciseViewModal(); App.exportExercisesPDF([${JSON.stringify(exercise)}], ${JSON.stringify(exercise.name)}, "Ficha de ejercicio")'>🖨️ Exportar PDF</button>
