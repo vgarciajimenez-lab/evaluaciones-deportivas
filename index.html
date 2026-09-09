@@ -211,6 +211,13 @@ const App = {
     if(session){
       this.user = session.user;
       await this.loadUserRole();
+      if(this.accessExpired){
+        await client.auth.signOut();
+        this.user = null;
+        this.view = 'expired';
+        this.render();
+        return;
+      }
       document.getElementById('topbar').style.display='flex';
       document.getElementById('userEmail').textContent = session.user.email;
       await this.landingView();
@@ -219,9 +226,17 @@ const App = {
   },
 
   async loadUserRole(){
+    this.accessExpired = false;
     try{
-      const { data, error } = await client.from('profiles').select('role, team_id, season').eq('id', this.user.id).single();
+      const { data, error } = await client.from('profiles').select('role, team_id, season, expires_at').eq('id', this.user.id).single();
       if(!error && data){
+        if(data.expires_at && new Date(data.expires_at) < new Date()){
+          this.accessExpired = true;
+          this.userRole = null;
+          this.userTeamId = null;
+          this.userSeason = null;
+          return;
+        }
         this.userRole = data.role;
         this.userTeamId = data.team_id;
         this.userSeason = data.season;
@@ -241,6 +256,17 @@ const App = {
       else if(this.userRole==='coach') tag.textContent = 'Entrenador' + (this.userSeason ? ` · ${this.userSeason}` : '');
       else tag.textContent = '';
     }
+  },
+
+  renderExpired(){
+    document.getElementById('app').innerHTML = `
+      <div class="login-wrap">
+        <h1>⛔ Acceso caducado</h1>
+        <div class="card" style="text-align:center;">
+          <p style="color:var(--muted);font-size:.9rem;">Tu acceso a esta cuenta ha caducado. Contacta con el club si crees que es un error o necesitas que te lo renueven.</p>
+          <button class="btn btn-outline btn-block" style="margin-top:20px;" onclick="App.view='login'; App.render();">Volver al inicio de sesión</button>
+        </div>
+      </div>`;
   },
 
   // Si es entrenador, lo llevamos directo a la ficha de SU equipo en vez
@@ -312,6 +338,13 @@ const App = {
     }
     this.user = data.user;
     await this.loadUserRole();
+    if(this.accessExpired){
+      await client.auth.signOut();
+      this.user = null;
+      this.view = 'expired';
+      this.render();
+      return;
+    }
     document.getElementById('topbar').style.display='flex';
     document.getElementById('userEmail').textContent = data.user.email;
     await this.landingView();
@@ -331,6 +364,7 @@ const App = {
     app.innerHTML = '<div class="empty">Cargando...</div>';
     try{
       if(this.view==='login') return this.renderLogin();
+      if(this.view==='expired') return this.renderExpired();
       if(this.view==='teams') return this.renderTeams();
       if(this.view==='users') return this.renderUsers();
       if(this.view==='clubStats') return this.renderClubStats();
@@ -508,10 +542,14 @@ const App = {
     profiles.forEach(p=>{
       const isSelf = p.id === this.user.id;
       const label = p.full_name || p.id;
+      const isExpired = p.expires_at && new Date(p.expires_at) < new Date();
       html += `<div class="card" id="userCard-${p.id}">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${isSelf?'0':'12px'};">
           <div style="font-weight:700;">${label}</div>
-          ${isSelf ? `<span class="pill">Eres tú (admin)</span>` : ''}
+          <div class="row" style="gap:6px;">
+            ${isExpired ? `<span class="pill" style="background:#fee2e2;color:#b91c1c;">⛔ Caducado</span>` : ''}
+            ${isSelf ? `<span class="pill">Eres tú (admin)</span>` : ''}
+          </div>
         </div>`;
       if(!isSelf){
         html += `<div class="row">
@@ -534,8 +572,12 @@ const App = {
             <label style="margin-top:0;">Temporada</label>
             <input type="text" id="userSeason-${p.id}" value="${p.season||''}" placeholder="Elige un equipo" readonly style="background:#f0ede3;color:var(--muted);cursor:not-allowed;">
           </div>
+          <div style="flex:1;min-width:150px;">
+            <label style="margin-top:0;">Caduca el (opcional)</label>
+            <input type="date" id="userExpires-${p.id}" value="${p.expires_at ? p.expires_at.slice(0,10) : ''}">
+          </div>
         </div>
-        <p style="font-size:.76rem;color:var(--muted);margin:8px 0 0;">La temporada se rellena sola con la del equipo elegido. Si dejas "Sin equipo", el entrenador podrá crear el suyo propio la primera vez que entre.</p>
+        <p style="font-size:.76rem;color:var(--muted);margin:8px 0 0;">La temporada se rellena sola con la del equipo elegido. Si dejas "Sin equipo", el entrenador podrá crear el suyo propio la primera vez que entre. Deja "Caduca el" en blanco para que el acceso no expire nunca.</p>
         <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="App.saveUserAccess('${p.id}')">Guardar</button>`;
       }
       html += `</div>`;
@@ -568,9 +610,13 @@ const App = {
       season = document.getElementById('userSeason-'+userId).value.trim() || null;
       // Dejarlo sin equipo es válido a propósito: podrá crear el suyo al entrar.
     }
-    const { error } = await client.from('profiles').update({ role, team_id, season }).eq('id', userId);
+    const expiresStr = document.getElementById('userExpires-'+userId).value;
+    const expires_at = expiresStr ? expiresStr+'T23:59:59' : null; // caduca al final de ese día
+
+    const { error } = await client.from('profiles').update({ role, team_id, season, expires_at }).eq('id', userId);
     if(error) return alert('Error: '+error.message);
     alert('Guardado correctamente.');
+    this.renderUsers();
   },
 
   async exportTeamCSV(){
