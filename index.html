@@ -375,10 +375,13 @@ const App = {
         ${teams && teams.length>1 ? `<button class="btn btn-outline" onclick="App.goClubStats()">📊 Estadísticas del club</button>` : ''}
         ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.exportFullBackup(this)">💾 Copia de seguridad</button>` : ''}
         ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.goUsers()">👥 Gestión de accesos</button>` : ''}
-        ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button>` : ''}
+        ${this.isAdmin() || (this.isCoach() && !this.userTeamId) ? `<button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button>` : ''}
       </div></div>`;
     if(!teams || teams.length===0){
       html += `<div class="empty"><div class="big">🏟️</div>Todavía no hay equipos.<br>Crea el primero para empezar.</div>`;
+      if(this.isCoach() && !this.userTeamId){
+        html += `<p style="text-align:center;color:var(--muted);font-size:.85rem;margin-top:-10px;">Todavía no tienes ningún equipo — pulsa "+ Nuevo equipo" para crear el tuyo. Quedará vinculado a tu cuenta automáticamente.</p>`;
+      }
     } else {
       teams.forEach(t=>{
         html += `<div class="list-item" onclick='App.goTeam(${JSON.stringify(t)})'>
@@ -390,8 +393,9 @@ const App = {
   },
 
   async editTeam(){
-    if(!this.requireAdmin()) return;
     const team = this.currentTeam;
+    const canEdit = this.isAdmin() || (this.isCoach() && this.userTeamId === team.id);
+    if(!canEdit){ alert('No tienes permisos para editar este equipo.'); return; }
     const name = prompt('Nombre del equipo:', team.name);
     if(!name) return;
     const season = prompt('Temporada (ej. 2026/27):', team.season);
@@ -399,6 +403,12 @@ const App = {
     const { error } = await client.from('teams').update({ name, season }).eq('id', team.id);
     if(error) return alert('Error: '+error.message);
     this.currentTeam = { ...team, name, season };
+    // Si el propio entrenador cambia la temporada de su equipo, actualizamos
+    // también la temporada guardada en su perfil, para que siga coincidiendo.
+    if(this.isCoach() && this.userTeamId === team.id){
+      await client.from('profiles').update({ season }).eq('id', this.user.id);
+      this.userSeason = season;
+    }
     this.renderTeam();
   },
 
@@ -516,7 +526,7 @@ const App = {
           <div style="flex:1;min-width:160px;" id="userTeamWrap-${p.id}" ${p.role!=='coach'?'style="display:none;flex:1;min-width:160px;"':''}>
             <label style="margin-top:0;">Equipo</label>
             <select id="userTeam-${p.id}" onchange="App.onUserTeamChange('${p.id}')">
-              <option value="">Sin equipo</option>
+              <option value="">Sin equipo (creará el suyo)</option>
               ${this._usersTeams.map(t=>`<option value="${t.id}" ${p.team_id===t.id?'selected':''}>${t.name}</option>`).join('')}
             </select>
           </div>
@@ -525,7 +535,7 @@ const App = {
             <input type="text" id="userSeason-${p.id}" value="${p.season||''}" placeholder="Elige un equipo" readonly style="background:#f0ede3;color:var(--muted);cursor:not-allowed;">
           </div>
         </div>
-        <p style="font-size:.76rem;color:var(--muted);margin:8px 0 0;">La temporada se rellena sola con la del equipo elegido, para que nunca se desajuste.</p>
+        <p style="font-size:.76rem;color:var(--muted);margin:8px 0 0;">La temporada se rellena sola con la del equipo elegido. Si dejas "Sin equipo", el entrenador podrá crear el suyo propio la primera vez que entre.</p>
         <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="App.saveUserAccess('${p.id}')">Guardar</button>`;
       }
       html += `</div>`;
@@ -556,10 +566,7 @@ const App = {
     if(role==='coach'){
       team_id = document.getElementById('userTeam-'+userId).value || null;
       season = document.getElementById('userSeason-'+userId).value.trim() || null;
-      if(!team_id || !season){
-        alert('Para el rol "Entrenador" tienes que elegir un equipo.');
-        return;
-      }
+      // Dejarlo sin equipo es válido a propósito: podrá crear el suyo al entrar.
     }
     const { error } = await client.from('profiles').update({ role, team_id, season }).eq('id', userId);
     if(error) return alert('Error: '+error.message);
@@ -692,13 +699,29 @@ const App = {
   },
 
   async promptNewTeam(){
-    if(!this.requireAdmin()) return;
+    const canCreate = this.isAdmin() || (this.isCoach() && !this.userTeamId);
+    if(!canCreate){ alert('No tienes permisos para crear un equipo.'); return; }
     const name = prompt('Nombre del equipo:');
     if(!name) return;
     const season = prompt('Temporada (ej. 2025/26):', '2025/26');
     if(!season) return;
-    const { error } = await client.from('teams').insert({ name, season });
+    const { data: newTeam, error } = await client.from('teams').insert({ name, season }).select().single();
     if(error) return alert('Error: '+error.message);
+
+    if(!this.isAdmin()){
+      // Entrenador creando su primer equipo: queda vinculado automáticamente
+      const { error: linkErr } = await client.from('profiles')
+        .update({ team_id: newTeam.id, season: newTeam.season })
+        .eq('id', this.user.id);
+      if(linkErr){
+        alert('El equipo se creó, pero no se pudo vincular automáticamente a tu cuenta: '+linkErr.message+'\n\nPídele al admin que te lo asigne desde "Gestión de accesos".');
+        this.renderTeams();
+        return;
+      }
+      await this.loadUserRole();
+      this.goTeam(newTeam);
+      return;
+    }
     this.renderTeams();
   },
 
