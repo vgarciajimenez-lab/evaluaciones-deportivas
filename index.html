@@ -770,7 +770,14 @@ const App = {
     const season = prompt('Temporada (ej. 2025/26):', '2025/26');
     if(!season) return;
     const { data: newTeam, error } = await client.from('teams').insert({ name, season }).select().single();
-    if(error) return alert('Error: '+error.message);
+    if(error){
+      let msg = 'Error: '+error.message;
+      if(error.details) msg += '\n\nDetalles: '+error.details;
+      if(error.hint) msg += '\nPista: '+error.hint;
+      if(error.code) msg += '\nCódigo: '+error.code;
+      alert(msg);
+      return;
+    }
 
     if(!this.isAdmin()){
       // Entrenador creando su primer equipo: queda vinculado automáticamente
