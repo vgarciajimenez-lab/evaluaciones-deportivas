@@ -307,6 +307,17 @@ const App = {
     return true;
   },
 
+  // Admin, o el propio entrenador sobre la plantilla de SU equipo
+  // (currentTeam siempre es el suyo, si es entrenador)
+  requireCanManageRoster(){
+    const ok = this.isAdmin() || (this.isCoach() && this.currentTeam && this.userTeamId === this.currentTeam.id);
+    if(!ok){
+      alert('No tienes permisos para hacer esto.');
+      return false;
+    }
+    return true;
+  },
+
   requireCanEvaluate(){
     if(!this.canEvaluate()){
       alert('Tu cuenta es de solo lectura. No puedes crear ni editar evaluaciones.');
@@ -402,13 +413,26 @@ const App = {
 
   // ---------- TEAMS ----------
   async renderTeams(){
-    const { data: teams, error } = await client.from('teams').select('*').order('name');
+    const { data: allTeams, error } = await client.from('teams').select('*').order('name');
     if(error) throw error;
+
+    // Al admin, por defecto, solo le mostramos los equipos que él mismo creó
+    // (para no mezclar los suyos con los que otros usuarios se hayan creado
+    // por autoservicio). Puede pulsar el botón para verlos todos.
+    let teams = allTeams;
+    let hiddenCount = 0;
+    if(this.isAdmin() && !this.showAllTeams){
+      teams = (allTeams||[]).filter(t => t.created_by === this.user.id);
+      hiddenCount = (allTeams||[]).length - teams.length;
+    }
+
     let html = `<div class="section-title"><h2>Equipos</h2>
       <div class="row">
         ${teams && teams.length>1 ? `<button class="btn btn-outline" onclick="App.goClubStats()">📊 Estadísticas del club</button>` : ''}
         ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.exportFullBackup(this)">💾 Copia de seguridad</button>` : ''}
         ${this.isAdmin() ? `<button class="btn btn-outline" onclick="App.goUsers()">👥 Gestión de accesos</button>` : ''}
+        ${this.isAdmin() && hiddenCount>0 ? `<button class="btn btn-outline" onclick="App.toggleShowAllTeams()">👁️ Ver también equipos de otros (${hiddenCount})</button>` : ''}
+        ${this.isAdmin() && this.showAllTeams ? `<button class="btn btn-outline" onclick="App.toggleShowAllTeams()">👁️ Ver solo los míos</button>` : ''}
         ${this.isAdmin() || (this.isCoach() && !this.userTeamId) ? `<button class="btn btn-outline" onclick="App.promptNewTeam()">+ Nuevo equipo</button>` : ''}
       </div></div>`;
     if(!teams || teams.length===0){
@@ -418,12 +442,18 @@ const App = {
       }
     } else {
       teams.forEach(t=>{
+        const isOther = this.isAdmin() && this.showAllTeams && t.created_by !== this.user.id;
         html += `<div class="list-item" onclick='App.goTeam(${JSON.stringify(t)})'>
-          <div><div class="name">${t.name}</div><div class="meta">Temporada ${t.season}</div></div>
+          <div><div class="name">${t.name} ${isOther ? '<span class="pill" style="margin-left:6px;">de otro usuario</span>' : ''}</div><div class="meta">Temporada ${t.season}</div></div>
           <div class="arrow">→</div></div>`;
       });
     }
     document.getElementById('app').innerHTML = html;
+  },
+
+  toggleShowAllTeams(){
+    this.showAllTeams = !this.showAllTeams;
+    this.renderTeams();
   },
 
   async editTeam(){
@@ -772,13 +802,13 @@ const App = {
 
     let newTeam, error;
     if(this.isAdmin()){
-      ({ data: newTeam, error } = await client.from('teams').insert({ name, season }).select().single());
+      ({ data: newTeam, error } = await client.from('teams').insert({ name, season, created_by: this.user.id }).select().single());
     } else {
       // Entrenador creando su primer equipo: generamos el id aquí mismo,
       // así no hace falta "leerlo de vuelta" justo después de crearlo
       // (en ese instante su perfil todavía no está vinculado a él, y
       // pedir el equipo de vuelta chocaría con esa regla de visibilidad).
-      newTeam = { id: crypto.randomUUID(), name, season };
+      newTeam = { id: crypto.randomUUID(), name, season, created_by: this.user.id };
       ({ error } = await client.from('teams').insert(newTeam));
     }
     if(error){
@@ -853,6 +883,11 @@ const App = {
     };
 
     const isAdmin = this.isAdmin();
+    // Gestionar la plantilla (añadir/editar/dar de baja jugadores y
+    // entrenadores) lo puede hacer el admin, o el propio entrenador
+    // sobre SU equipo (aquí siempre es el suyo, porque un entrenador
+    // solo puede llegar a la ficha de su propio equipo).
+    const canManageRoster = isAdmin || (this.isCoach() && this.userTeamId === team.id);
 
     let html = `<div class="crumb" onclick="App.goTeams()">← Todos los equipos</div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -860,13 +895,13 @@ const App = {
         <div class="row">
           <button class="btn btn-outline" onclick="App.goTeamStats()">📊 Estadísticas del equipo</button>
           <button class="btn btn-outline" onclick="App.exportTeamCSV()">⬇️ Exportar CSV</button>
-          ${isAdmin ? `<button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>` : ''}
+          ${canManageRoster ? `<button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>` : ''}
           ${isAdmin ? `<button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="App.deleteTeam()">🗑️ Eliminar equipo</button>` : ''}
         </div>
       </div>`;
 
     html += `<div class="section-title"><h2>Jugadores</h2>
-      ${isAdmin ? `<button class="btn btn-outline" onclick="App.promptNewPerson('player')">+ Añadir jugador</button>` : ''}</div>`;
+      ${canManageRoster ? `<button class="btn btn-outline" onclick="App.promptNewPerson('player')">+ Añadir jugador</button>` : ''}</div>`;
     if(!players || players.length===0){
       html += `<div class="empty">Sin jugadores todavía.</div>`;
     } else {
@@ -880,8 +915,8 @@ const App = {
             ${avatarHtml}
             <div><div class="name">${p.number!=null ? `#${p.number} ` : ''}${p.full_name}${staleBadge(p.id)}</div><div class="meta">${p.number!=null ? '' : 'Sin número asignado'}</div></div>
           </div>
-          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editPlayer(${JSON.stringify(p)})'>✏️</button>` : ''}
-          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("players", "${p.id}", false)'>⏸️</button>` : ''}
+          ${canManageRoster ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editPlayer(${JSON.stringify(p)})'>✏️</button>` : ''}
+          ${canManageRoster ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("players", "${p.id}", false)'>⏸️</button>` : ''}
           ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Mover a otro equipo" onclick='event.stopPropagation(); App.openMovePlayerModal(${JSON.stringify(p)})'>🔀</button>` : ''}
           <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
       });
@@ -897,14 +932,14 @@ const App = {
       inactivePlayers.forEach(p=>{
         html += `<div class="list-item" style="opacity:.7;">
           <div style="flex:1;"><div class="name">${p.number!=null ? `#${p.number} ` : ''}${p.full_name}</div></div>
-          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Reactivar" onclick='App.togglePersonActive("players", "${p.id}", true)'>↩️ Reactivar</button>` : ''}
+          ${canManageRoster ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Reactivar" onclick='App.togglePersonActive("players", "${p.id}", true)'>↩️ Reactivar</button>` : ''}
         </div>`;
       });
       html += `</div></div>`;
     }
 
     html += `<div class="section-title"><h2>Entrenadores</h2>
-      ${isAdmin ? `<button class="btn btn-outline" onclick="App.promptNewPerson('coach')">+ Añadir entrenador</button>` : ''}</div>`;
+      ${canManageRoster ? `<button class="btn btn-outline" onclick="App.promptNewPerson('coach')">+ Añadir entrenador</button>` : ''}</div>`;
     if(!coaches || coaches.length===0){
       html += `<div class="empty">Sin entrenadores todavía.</div>`;
     } else {
@@ -913,8 +948,8 @@ const App = {
         html += `<div class="list-item">
           <div onclick='App.goSubject(${JSON.stringify(subj)})' style="flex:1;cursor:pointer;">
             <div class="name">${c.full_name}${staleBadge(c.id)}</div></div>
-          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editCoach(${JSON.stringify(c)})'>✏️</button>` : ''}
-          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("coaches", "${c.id}", false)'>⏸️</button>` : ''}
+          ${canManageRoster ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" onclick='event.stopPropagation(); App.editCoach(${JSON.stringify(c)})'>✏️</button>` : ''}
+          ${canManageRoster ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Dar de baja" onclick='event.stopPropagation(); App.togglePersonActive("coaches", "${c.id}", false)'>⏸️</button>` : ''}
           <div class="arrow" onclick='App.goSubject(${JSON.stringify(subj)})' style="cursor:pointer;">→</div></div>`;
       });
     }
@@ -929,7 +964,7 @@ const App = {
       inactiveCoaches.forEach(c=>{
         html += `<div class="list-item" style="opacity:.7;">
           <div style="flex:1;"><div class="name">${c.full_name}</div></div>
-          ${isAdmin ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Reactivar" onclick='App.togglePersonActive("coaches", "${c.id}", true)'>↩️ Reactivar</button>` : ''}
+          ${canManageRoster ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Reactivar" onclick='App.togglePersonActive("coaches", "${c.id}", true)'>↩️ Reactivar</button>` : ''}
         </div>`;
       });
       html += `</div></div>`;
@@ -939,7 +974,7 @@ const App = {
   },
 
   async togglePersonActive(table, id, newActive){
-    if(!this.requireAdmin()) return;
+    if(!this.requireCanManageRoster()) return;
     if(!newActive){
       const ok = confirm('¿Dar de baja a este jugador/entrenador? No se borra nada, solo dejará de aparecer en la lista principal. Podrás reactivarlo cuando quieras.');
       if(!ok) return;
@@ -950,7 +985,7 @@ const App = {
   },
 
   async promptNewPerson(type){
-    if(!this.requireAdmin()) return;
+    if(!this.requireCanManageRoster()) return;
     if(type==='player'){
       this.openPlayerModal(null);
       return;
@@ -973,7 +1008,7 @@ const App = {
   },
 
   openPlayerModal(player){
-    if(!this.requireAdmin()) return;
+    if(!this.requireCanManageRoster()) return;
     const isEdit = !!player;
     const currentPhoto = player && player.photo_url ? player.photo_url : null;
     const overlay = document.createElement('div');
@@ -1151,7 +1186,7 @@ const App = {
   },
 
   async editCoach(coach){
-    if(!this.requireAdmin()) return;
+    if(!this.requireCanManageRoster()) return;
     const name = prompt('Nombre del entrenador:', coach.full_name);
     if(!name) return;
     const { error } = await client.from('coaches').update({ full_name: name }).eq('id', coach.id);
