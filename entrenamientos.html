@@ -891,9 +891,32 @@ const App = {
     if(!sel) return;
     const q = (searchEl ? searchEl.value : '').toLowerCase();
     const cat = catEl ? catEl.value : 'all';
-    const filtered = this._libraryExercises
+    let filtered = this._libraryExercises
       .filter(ex=> cat==='all' || ex.category===cat)
       .filter(ex=> !q || ex.name.toLowerCase().includes(q));
+
+    // Respeta el límite de ejercicios por categoría del usuario (el mismo
+    // que se aplica en la biblioteca), para que tampoco se pueda esquivar
+    // añadiéndolos directamente desde aquí.
+    const limit = this.userExerciseCategoryLimit;
+    if(limit!=null){
+      if(cat !== 'all'){
+        filtered = filtered.slice(0, limit);
+      } else {
+        const byCategory = new Map();
+        const capped = [];
+        filtered.forEach(ex=>{
+          const key = ex.category || '';
+          const count = byCategory.get(key) || 0;
+          if(count < limit){
+            capped.push(ex);
+            byCategory.set(key, count+1);
+          }
+        });
+        filtered = capped;
+      }
+    }
+
     sel.innerHTML = `<option value="">Elige un ejercicio... (${filtered.length})</option>` +
       filtered.map(ex=>`<option value="${ex.id}">${ex.name}${ex.category?` (${ex.category})`:''}</option>`).join('');
   },
