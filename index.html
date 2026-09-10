@@ -769,7 +769,18 @@ const App = {
     if(!name) return;
     const season = prompt('Temporada (ej. 2025/26):', '2025/26');
     if(!season) return;
-    const { data: newTeam, error } = await client.from('teams').insert({ name, season }).select().single();
+
+    let newTeam, error;
+    if(this.isAdmin()){
+      ({ data: newTeam, error } = await client.from('teams').insert({ name, season }).select().single());
+    } else {
+      // Entrenador creando su primer equipo: generamos el id aquí mismo,
+      // así no hace falta "leerlo de vuelta" justo después de crearlo
+      // (en ese instante su perfil todavía no está vinculado a él, y
+      // pedir el equipo de vuelta chocaría con esa regla de visibilidad).
+      newTeam = { id: crypto.randomUUID(), name, season };
+      ({ error } = await client.from('teams').insert(newTeam));
+    }
     if(error){
       let msg = 'Error: '+error.message;
       if(error.details) msg += '\n\nDetalles: '+error.details;
