@@ -405,6 +405,10 @@ const App = {
           <button id="loginBtn" class="btn btn-primary btn-block" style="margin-top:20px;" onclick="App.login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value)">Entrar</button>
           <div class="error" id="loginError" style="display:none;"></div>
         </div>
+        <p style="text-align:center;color:var(--muted);font-size:.85rem;margin-top:24px;line-height:1.5;">
+          <strong style="color:var(--ink);">Tu cantera, bajo control.</strong><br>
+          Sigue la evolución de jugadores y entrenadores, y detecta quién necesita más atención.
+        </p>
       </div>`;
     document.getElementById('loginPassword').addEventListener('keydown', e=>{
       if(e.key==='Enter') App.login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value);
