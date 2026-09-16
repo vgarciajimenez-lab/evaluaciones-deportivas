@@ -129,6 +129,7 @@
   <div class="brand">🏋️ HoopPractice<span id="userEmail"></span><span id="roleTag"></span></div>
   <div class="topbar-right">
     <a class="applink" href="./index.html">← HoopYouth</a>
+    <button onclick="App.promptChangePassword()" style="margin-right:8px;">🔑 Contraseña</button>
     <button onclick="App.logout()">Cerrar sesión</button>
   </div>
 </div>
@@ -224,6 +225,28 @@ const App = {
     this.view = 'login'; this.render();
   },
 
+  async promptChangePassword(){
+    const newPw = prompt('Escribe tu nueva contraseña (mínimo 6 caracteres):');
+    if(!newPw) return;
+    if(newPw.length < 6){ alert('La contraseña debe tener al menos 6 caracteres.'); return; }
+    const confirmPw = prompt('Vuelve a escribirla para confirmar:');
+    if(newPw !== confirmPw){ alert('Las contraseñas no coinciden. No se ha cambiado nada.'); return; }
+    const { error } = await client.auth.updateUser({ password: newPw });
+    if(error) return alert('Error: '+error.message);
+    alert('Contraseña actualizada correctamente.');
+  },
+
+  async promptForgotPassword(){
+    const email = prompt('Escribe tu email, y te enviaremos un enlace para poner una contraseña nueva:');
+    if(!email) return;
+    // El enlace del correo siempre vuelve a HoopYouth (comparten cuenta),
+    // que es donde se gestiona poner la contraseña nueva.
+    const redirectTo = window.location.href.replace(/[^\/]*$/, 'index.html');
+    const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo });
+    if(error){ alert('Error: '+error.message); return; }
+    alert('Si ese email tiene una cuenta, te hemos enviado un correo con un enlace para poner una contraseña nueva. Revisa también la carpeta de spam.');
+  },
+
   async login(email, password){
     const btn = document.getElementById('loginBtn');
     btn.disabled = true; btn.textContent = 'Entrando...';
@@ -291,6 +314,9 @@ const App = {
           <input type="password" id="loginPassword" placeholder="••••••••">
           <button id="loginBtn" class="btn btn-primary btn-block" style="margin-top:20px;" onclick="App.login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value)">Entrar</button>
           <div class="error" id="loginError" style="display:none;"></div>
+          <p style="text-align:center;margin-top:14px;">
+            <a href="#" onclick="App.promptForgotPassword(); return false;" style="color:var(--teal);font-size:.85rem;">¿Olvidaste tu contraseña?</a>
+          </p>
         </div>
       </div>`;
     document.getElementById('loginPassword').addEventListener('keydown', e=>{

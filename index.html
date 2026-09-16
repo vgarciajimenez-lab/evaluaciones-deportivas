@@ -187,6 +187,7 @@
   <div class="brand">HoopYouth<span id="userEmail"></span><span id="roleTag"></span></div>
   <div style="display:flex;align-items:center;gap:10px;">
     <a href="./entrenamientos.html" style="color:#fff;opacity:.8;text-decoration:none;font-size:.82rem;border:1px solid rgba(255,255,255,.35);padding:7px 12px;border-radius:100px;">🏋️ HoopPractice</a>
+    <button onclick="App.promptChangePassword()" style="margin-right:8px;">🔑 Contraseña</button>
     <button onclick="App.logout()">Cerrar sesión</button>
   </div>
 </div>
@@ -207,6 +208,11 @@ const App = {
   scaleSelections: {},       // criterionId -> scaleLevelId
 
   async init(){
+    // Si venimos de un enlace de "restablecer contraseña" (correo), dejamos
+    // que el evento de recuperación (más abajo) lleve a esa pantalla, en
+    // vez de intentar entrar con normalidad.
+    if(window.location.hash.includes('type=recovery')) return;
+
     const { data:{ session } } = await client.auth.getSession();
     if(session){
       this.user = session.user;
@@ -337,6 +343,28 @@ const App = {
     this.render();
   },
 
+  async promptChangePassword(){
+    const newPw = prompt('Escribe tu nueva contraseña (mínimo 6 caracteres):');
+    if(!newPw) return;
+    if(newPw.length < 6){ alert('La contraseña debe tener al menos 6 caracteres.'); return; }
+    const confirmPw = prompt('Vuelve a escribirla para confirmar:');
+    if(newPw !== confirmPw){ alert('Las contraseñas no coinciden. No se ha cambiado nada.'); return; }
+    const { error } = await client.auth.updateUser({ password: newPw });
+    if(error) return alert('Error: '+error.message);
+    alert('Contraseña actualizada correctamente.');
+  },
+
+  async promptForgotPassword(){
+    const email = prompt('Escribe tu email, y te enviaremos un enlace para poner una contraseña nueva:');
+    if(!email) return;
+    // El enlace del correo siempre vuelve a HoopYouth, sea cual sea la
+    // app desde la que se pidió (HoopYouth o HoopPractice comparten cuenta).
+    const redirectTo = window.location.href.replace(/[^\/]*$/, 'index.html');
+    const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo });
+    if(error){ alert('Error: '+error.message); return; }
+    alert('Si ese email tiene una cuenta, te hemos enviado un correo con un enlace para poner una contraseña nueva. Revisa también la carpeta de spam.');
+  },
+
   async login(email, password){
     const btn = document.getElementById('loginBtn');
     btn.disabled = true; btn.textContent = 'Entrando...';
@@ -376,6 +404,7 @@ const App = {
     try{
       if(this.view==='login') return this.renderLogin();
       if(this.view==='expired') return this.renderExpired();
+      if(this.view==='setNewPassword') return this.renderSetNewPassword();
       if(this.view==='teams') return this.renderTeams();
       if(this.view==='users') return this.renderUsers();
       if(this.view==='clubStats') return this.renderClubStats();
@@ -404,6 +433,9 @@ const App = {
           <input type="password" id="loginPassword" placeholder="••••••••">
           <button id="loginBtn" class="btn btn-primary btn-block" style="margin-top:20px;" onclick="App.login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value)">Entrar</button>
           <div class="error" id="loginError" style="display:none;"></div>
+          <p style="text-align:center;margin-top:14px;">
+            <a href="#" onclick="App.promptForgotPassword(); return false;" style="color:var(--teal);font-size:.85rem;">¿Olvidaste tu contraseña?</a>
+          </p>
         </div>
         <p style="text-align:center;color:var(--muted);font-size:.85rem;margin-top:24px;line-height:1.5;">
           <strong style="color:var(--ink);">Tu cantera, bajo control.</strong><br>
@@ -413,6 +445,51 @@ const App = {
     document.getElementById('loginPassword').addEventListener('keydown', e=>{
       if(e.key==='Enter') App.login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value);
     });
+  },
+
+  renderSetNewPassword(){
+    document.getElementById('app').innerHTML = `
+      <div class="login-wrap">
+        <h1>🔑 Nueva contraseña</h1>
+        <p>Escribe tu nueva contraseña para continuar</p>
+        <div class="card">
+          <label>Nueva contraseña</label>
+          <input type="password" id="newPwInput" placeholder="Mínimo 6 caracteres">
+          <label>Repítela</label>
+          <input type="password" id="newPwConfirm" placeholder="Repite la contraseña">
+          <button id="newPwBtn" class="btn btn-primary btn-block" style="margin-top:20px;" onclick="App.confirmSetNewPassword()">Guardar nueva contraseña</button>
+          <div class="error" id="setPwError" style="display:none;"></div>
+        </div>
+      </div>`;
+  },
+
+  async confirmSetNewPassword(){
+    const pw = document.getElementById('newPwInput').value;
+    const pw2 = document.getElementById('newPwConfirm').value;
+    const errEl = document.getElementById('setPwError');
+    errEl.style.display = 'none';
+    if(!pw || pw.length < 6){ errEl.textContent = 'La contraseña debe tener al menos 6 caracteres.'; errEl.style.display='block'; return; }
+    if(pw !== pw2){ errEl.textContent = 'Las contraseñas no coinciden.'; errEl.style.display='block'; return; }
+
+    const btn = document.getElementById('newPwBtn');
+    btn.disabled = true; btn.textContent = 'Guardando...';
+    const { error } = await client.auth.updateUser({ password: pw });
+    btn.disabled = false; btn.textContent = 'Guardar nueva contraseña';
+    if(error){ errEl.textContent = 'Error: '+error.message; errEl.style.display='block'; return; }
+
+    alert('Contraseña actualizada correctamente. Ya has entrado con ella.');
+    await this.loadUserRole();
+    if(this.accessExpired){
+      await client.auth.signOut();
+      this.user = null;
+      this.view = 'expired';
+      this.render();
+      return;
+    }
+    document.getElementById('topbar').style.display='flex';
+    document.getElementById('userEmail').textContent = this.user.email;
+    await this.landingView();
+    this.render();
   },
 
   // ---------- TEAMS ----------
@@ -2139,6 +2216,16 @@ const App = {
     document.getElementById('app').innerHTML = html;
   }
 };
+
+// Detecta cuando alguien vuelve desde el enlace del correo de
+// "restablecer contraseña", y le lleva a la pantalla para ponerla nueva.
+client.auth.onAuthStateChange((event, session)=>{
+  if(event === 'PASSWORD_RECOVERY'){
+    App.user = session.user;
+    App.view = 'setNewPassword';
+    App.render();
+  }
+});
 
 App.init();
 
