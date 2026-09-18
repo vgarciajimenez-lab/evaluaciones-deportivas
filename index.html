@@ -1822,11 +1822,31 @@ const App = {
     this.render();
   },
 
+  // Fecha a partir de la cual se usa el texto nuevo del semáforo "rojo".
+  // Las evaluaciones creadas ANTES de esta fecha siguen mostrando el
+  // texto original tal cual lo vieron en su momento.
+  SEMAFORO_WORDING_CUTOFF: '2026-09-18T00:00:00',
+
   SEMAFORO_OPTIONS: [
     { value:'verde', label:'Señales positivas', color:'#22c55e', desc:'Habla de jugadores, objetivos concretos, autocrítica, comparte información.' },
     { value:'amarillo', label:'Puntos de atención', color:'#f59e0b', desc:'Enfoque excesivo en sistemas/ganar, dificultad metodológica, poca autocrítica.' },
+    { value:'rojo', label:'Alerta (requiere intervención inmediata)', color:'#ef4444', desc:'Humillación, gritos sistemáticos, culpa a árbitros, no acepta supervisión.' },
+  ],
+
+  // Solo hace falta guardar aquí las etiquetas que hayan cambiado de texto
+  SEMAFORO_OPTIONS_LEGACY: [
     { value:'rojo', label:'Alarma (descarte)', color:'#ef4444', desc:'Humillación, gritos sistemáticos, culpa a árbitros, no acepta supervisión.' },
   ],
+
+  // Para MOSTRAR una evaluación ya guardada: usa el texto que tenía en su
+  // momento. Para el FORMULARIO de una nueva, se sigue usando SEMAFORO_OPTIONS directamente.
+  getSemaforoDisplay(value, evaluationCreatedAt){
+    if(evaluationCreatedAt && new Date(evaluationCreatedAt) < new Date(this.SEMAFORO_WORDING_CUTOFF)){
+      const legacy = this.SEMAFORO_OPTIONS_LEGACY.find(o=>o.value===value);
+      if(legacy) return legacy;
+    }
+    return this.SEMAFORO_OPTIONS.find(o=>o.value===value);
+  },
 
   async renderEvaluationForm(){
     const template = this.currentTemplate;
@@ -1837,12 +1857,17 @@ const App = {
     const { data: criteria, error: e2 } = await client.from('criteria')
       .select('*').in('category_id', categoryIds.length?categoryIds:['00000000-0000-0000-0000-000000000000']).order('sort_order');
     if(e2) throw e2;
-    const { data: scaleLevels, error: e3 } = await client.from('scale_levels')
+    const { data: allScaleLevels, error: e3 } = await client.from('scale_levels')
       .select('*').eq('template_id', template.id).order('sort_order');
     if(e3) throw e3;
 
-    const coachMode = !scaleLevels || scaleLevels.length===0;
     const isEditing = !!this._editingEvaluationId;
+    // Al crear una evaluación nueva, solo se ofrecen los niveles activos.
+    // Al editar una ya existente, se muestran todos (por si esa evaluación
+    // usa un nivel ya retirado, para no perder ese dato al guardar).
+    const scaleLevels = isEditing ? allScaleLevels : (allScaleLevels||[]).filter(sl=>sl.active);
+
+    const coachMode = !allScaleLevels || allScaleLevels.length===0;
 
     let existingScoresByCriterion = {};
     if(isEditing){
@@ -2159,7 +2184,7 @@ const App = {
         <div style="font-size:2rem;font-weight:800;color:var(--teal-dark);">${total} <span style="font-size:1.1rem;color:var(--muted);font-weight:600;">/ ${maxTotal||100}</span></div>
       </div>`;
       if(ev.semaforo){
-        const opt = this.SEMAFORO_OPTIONS.find(o=>o.value===ev.semaforo);
+        const opt = this.getSemaforoDisplay(ev.semaforo, ev.created_at);
         if(opt){
           html += `<div class="card" style="display:flex;align-items:center;gap:12px;">
             <span class="semaforo-dot" style="background:${opt.color};width:20px;height:20px;"></span>
