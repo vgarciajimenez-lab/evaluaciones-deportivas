@@ -1363,7 +1363,7 @@ const App = {
       </div>
       <div class="toolbar" style="margin-top:16px;">
         ${subj.type==='player' && allEvals.length ? `<button class="btn btn-outline" onclick="App.goStats()">📊 Estadísticas</button>` : ''}
-        ${this.canEvaluate() ? `<button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button>` : ''}
+        ${(this.isAdmin() || (this.isCoach() && subj.type==='player')) ? `<button class="btn btn-primary" onclick="App.startNewEvaluation()">+ Nueva evaluación</button>` : ''}
       </div>`;
 
     if(allEvals.length===0){
@@ -2162,7 +2162,7 @@ const App = {
 
     let html = `<div class="crumb no-print" onclick='App.goSubject(${JSON.stringify(this.currentSubject)})'>← ${this.currentSubject.full_name}</div>
       <div class="toolbar no-print">
-        ${this.canEvaluate() ? `<button class="btn btn-outline" onclick="App.editEvaluation('${ev.id}')">✏️ Editar evaluación</button>` : ''}
+        ${(this.isAdmin() || (this.isCoach() && subj.type==='player')) ? `<button class="btn btn-outline" onclick="App.editEvaluation('${ev.id}')">✏️ Editar evaluación</button>` : ''}
         <button class="btn btn-outline" onclick="window.print()">Imprimir o guardar en PDF</button>
       </div>
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px;">
