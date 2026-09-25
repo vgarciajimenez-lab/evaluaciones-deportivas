@@ -207,12 +207,12 @@ const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // El mínimo de periodos solo cuenta dentro de los "periodos aplicables"
 // (los últimos periodos del partido quedan libres de esa exigencia).
 const MATCH_RULE_PRESETS = {
-  none: { label:'Sin límite de minutos', periods_count:4, period_minutes:10, min_rule_type:'none', min_rule_periods:null, min_rule_applicable_periods:null, note:'' },
-  benjamin: { label:'Benjamín Mixto (4x4)', periods_count:7, period_minutes:6, min_rule_type:'periods', min_rule_periods:2, min_rule_applicable_periods:6,
-    note:'Además del mínimo de 2 periodos, cada jugador debe jugar al menos 1 periodo completo antes del descanso (antes del 4º periodo).' },
-  minibasket: { label:'Minibasket', periods_count:6, period_minutes:8, min_rule_type:'periods', min_rule_periods:2, min_rule_applicable_periods:5, note:'' },
-  infantil: { label:'Infantil', periods_count:8, period_minutes:5, min_rule_type:'periods', min_rule_periods:2, min_rule_applicable_periods:6, note:'' },
-  custom: { label:'Personalizado', periods_count:4, period_minutes:10, min_rule_type:'periods', min_rule_periods:null, min_rule_applicable_periods:null, note:'' },
+  none: { label:'Sin límite de minutos', periods_count:4, period_minutes:10, min_rule_type:'none', min_rule_periods:null, min_rule_rest_periods:null, min_rule_applicable_periods:null, note:'' },
+  benjamin: { label:'Benjamín Mixto (4x4)', periods_count:7, period_minutes:6, min_rule_type:'periods', min_rule_periods:2, min_rule_rest_periods:2, min_rule_applicable_periods:6,
+    note:'Además, cada jugador debe jugar al menos 1 periodo completo antes del descanso (antes del 4º periodo).' },
+  minibasket: { label:'Minibasket', periods_count:6, period_minutes:8, min_rule_type:'periods', min_rule_periods:2, min_rule_rest_periods:2, min_rule_applicable_periods:5, note:'' },
+  infantil: { label:'Infantil', periods_count:8, period_minutes:5, min_rule_type:'periods', min_rule_periods:2, min_rule_rest_periods:2, min_rule_applicable_periods:6, note:'' },
+  custom: { label:'Personalizado', periods_count:4, period_minutes:10, min_rule_type:'periods', min_rule_periods:null, min_rule_rest_periods:null, min_rule_applicable_periods:null, note:'' },
 };
 
 
@@ -2357,6 +2357,10 @@ const App = {
             <input type="number" min="0" id="matchMinPeriods" value="${match && match.min_rule_periods!=null ? match.min_rule_periods : (MATCH_RULE_PRESETS[presetKey].min_rule_periods ?? '')}">
           </div>
           <div style="flex:1;">
+            <label>Mínimo de periodos a descansar</label>
+            <input type="number" min="0" id="matchMinRestPeriods" value="${match && match.min_rule_rest_periods!=null ? match.min_rule_rest_periods : (MATCH_RULE_PRESETS[presetKey].min_rule_rest_periods ?? '')}">
+          </div>
+          <div style="flex:1;">
             <label>De los primeros N periodos</label>
             <input type="number" min="0" id="matchApplicablePeriods" value="${match && match.min_rule_applicable_periods!=null ? match.min_rule_applicable_periods : (MATCH_RULE_PRESETS[presetKey].min_rule_applicable_periods ?? '')}">
           </div>
@@ -2385,6 +2389,7 @@ const App = {
     document.getElementById('matchPeriodsCount').value = p.periods_count;
     document.getElementById('matchPeriodMinutes').value = p.period_minutes;
     document.getElementById('matchMinPeriods').value = p.min_rule_periods ?? '';
+    document.getElementById('matchMinRestPeriods').value = p.min_rule_rest_periods ?? '';
     document.getElementById('matchApplicablePeriods').value = p.min_rule_applicable_periods ?? '';
     document.getElementById('matchRuleFieldsWrap').style.display = p.min_rule_type==='none' ? 'none' : 'flex';
     document.getElementById('matchPresetNote').textContent = p.note || '';
@@ -2401,14 +2406,16 @@ const App = {
     const periods_count = parseInt(document.getElementById('matchPeriodsCount').value, 10) || 4;
     const period_minutes = parseInt(document.getElementById('matchPeriodMinutes').value, 10) || 10;
     const minPeriodsStr = document.getElementById('matchMinPeriods').value;
+    const minRestStr = document.getElementById('matchMinRestPeriods').value;
     const applicableStr = document.getElementById('matchApplicablePeriods').value;
     const min_rule_periods = min_rule_type==='periods' && minPeriodsStr!=='' ? parseInt(minPeriodsStr,10) : null;
+    const min_rule_rest_periods = min_rule_type==='periods' && minRestStr!=='' ? parseInt(minRestStr,10) : null;
     const min_rule_applicable_periods = min_rule_type==='periods' && applicableStr!=='' ? parseInt(applicableStr,10) : null;
     const notes = document.getElementById('matchNotes').value.trim() || null;
 
     const payload = {
       team_id: this.currentTeam.id, opponent, match_date, is_home, competition,
-      periods_count, period_minutes, min_rule_type, min_rule_periods, min_rule_applicable_periods,
+      periods_count, period_minutes, min_rule_type, min_rule_periods, min_rule_rest_periods, min_rule_applicable_periods,
       min_rule_minutes: null, notes
     };
 
@@ -2472,7 +2479,7 @@ const App = {
 
     if(match.min_rule_type !== 'none'){
       html += `<div class="card" style="font-size:.85rem;">
-        <strong>Normativa:</strong> mínimo ${match.min_rule_periods} de los primeros ${match.min_rule_applicable_periods} periodos (de ${match.periods_count} en total, ${match.period_minutes} min/periodo).
+        <strong>Normativa:</strong> cada convocado debe jugar al menos ${match.min_rule_periods} y descansar al menos ${match.min_rule_rest_periods||0} de los primeros ${match.min_rule_applicable_periods} periodos (de ${match.periods_count} en total, ${match.period_minutes} min/periodo).
         ${match.notes ? `<p style="color:var(--muted);margin-top:6px;">${match.notes}</p>` : ''}
       </div>`;
     }
@@ -2533,14 +2540,20 @@ const App = {
     const calledUpIds = new Set(callups.map(c=>c.player_id));
     const calledUpPlayers = allPlayers.filter(p=>calledUpIds.has(p.id));
     const applicable = match.min_rule_applicable_periods || match.periods_count;
-    const need = match.min_rule_periods || 0;
+    const needPlay = match.min_rule_periods || 0;
+    const needRest = match.min_rule_rest_periods || 0;
+    const maxPlay = applicable - needRest; // como mucho puede jugar esto, para poder descansar lo exigido
 
     // Cumplimiento de cada convocado, calculado una sola vez (se usa en el
-    // aviso destacado de arriba y en la columna "Estado" de cada fila)
+    // aviso destacado de arriba y en la columna "Estado" de cada fila).
+    // Hay que cumplir las DOS condiciones: jugar al menos "needPlay" Y
+    // descansar al menos "needRest", dentro de los primeros "applicable" periodos.
     const statuses = calledUpPlayers.map(p=>{
       const rows = participation.filter(r=>r.player_id===p.id);
       const count = rows.filter(r=> r.period_number<=applicable && r[mode]).length;
-      return { player: p, count, ok: count >= need };
+      const tooFew = count < needPlay;
+      const tooMany = count > maxPlay;
+      return { player: p, count, ok: !tooFew && !tooMany, tooFew, tooMany };
     });
     const failing = statuses.filter(s=>!s.ok);
 
@@ -2549,12 +2562,12 @@ const App = {
 
     if(match.min_rule_type!=='none' && failing.length>0){
       html += `<div class="card" style="background:#fef2f2;border-color:#fecaca;margin-bottom:12px;">
-        <p style="color:#b91c1c;font-weight:700;font-size:.88rem;margin-bottom:6px;">⚠️ ${failing.length} de ${statuses.length} convocados no llegan al mínimo (${need} de los primeros ${applicable} periodos)</p>
-        <p style="color:#991b1b;font-size:.82rem;">${failing.map(s=>`${s.player.full_name} (${s.count}/${need})`).join(', ')}</p>
+        <p style="color:#b91c1c;font-weight:700;font-size:.88rem;margin-bottom:6px;">⚠️ ${failing.length} de ${statuses.length} convocados incumplen la normativa (entre ${needPlay} y ${maxPlay} periodos, de los primeros ${applicable})</p>
+        <p style="color:#991b1b;font-size:.82rem;">${failing.map(s=>`${s.player.full_name} (${s.count} — ${s.tooFew ? 'le falta jugar' : 'debe descansar más'})`).join(', ')}</p>
       </div>`;
     } else if(match.min_rule_type!=='none' && statuses.length>0){
       html += `<div class="card" style="background:#f0fdf4;border-color:#bbf7d0;margin-bottom:12px;">
-        <p style="color:#166534;font-weight:700;font-size:.88rem;">✅ Todos los convocados cumplen el mínimo exigido</p>
+        <p style="color:#166534;font-weight:700;font-size:.88rem;">✅ Todos los convocados cumplen la normativa (entre ${needPlay} y ${maxPlay} periodos jugados)</p>
       </div>`;
     }
 
@@ -2580,8 +2593,9 @@ const App = {
       }
       if(match.min_rule_type!=='none'){
         const s = statuses[idx];
-        html += `<td style="text-align:center;padding:4px 8px;white-space:nowrap;">
-          <span class="pill" style="background:${s.ok?'#dcfce7':'#fee2e2'};color:${s.ok?'#166534':'#b91c1c'};">${s.ok?'✅':'⚠️'} ${s.count}/${need}</span>
+        const title = s.tooFew ? 'Le falta jugar periodos' : s.tooMany ? 'Debe descansar más periodos' : '';
+        html += `<td style="text-align:center;padding:4px 8px;white-space:nowrap;" title="${title}">
+          <span class="pill" style="background:${s.ok?'#dcfce7':'#fee2e2'};color:${s.ok?'#166534':'#b91c1c'};">${s.ok?'✅':'⚠️'} ${s.count}</span>
         </td>`;
       }
       html += `</tr>`;
