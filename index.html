@@ -2533,10 +2533,32 @@ const App = {
     const calledUpIds = new Set(callups.map(c=>c.player_id));
     const calledUpPlayers = allPlayers.filter(p=>calledUpIds.has(p.id));
     const applicable = match.min_rule_applicable_periods || match.periods_count;
+    const need = match.min_rule_periods || 0;
+
+    // Cumplimiento de cada convocado, calculado una sola vez (se usa en el
+    // aviso destacado de arriba y en la columna "Estado" de cada fila)
+    const statuses = calledUpPlayers.map(p=>{
+      const rows = participation.filter(r=>r.player_id===p.id);
+      const count = rows.filter(r=> r.period_number<=applicable && r[mode]).length;
+      return { player: p, count, ok: count >= need };
+    });
+    const failing = statuses.filter(s=>!s.ok);
 
     let html = `<div class="section-title"><h2 style="font-size:1rem;">${title}</h2></div>
-      <p style="color:var(--muted);font-size:.8rem;margin:-4px 0 10px;">${subtitle}</p>
-      <div class="card" style="overflow-x:auto;">
+      <p style="color:var(--muted);font-size:.8rem;margin:-4px 0 10px;">${subtitle}</p>`;
+
+    if(match.min_rule_type!=='none' && failing.length>0){
+      html += `<div class="card" style="background:#fef2f2;border-color:#fecaca;margin-bottom:12px;">
+        <p style="color:#b91c1c;font-weight:700;font-size:.88rem;margin-bottom:6px;">⚠️ ${failing.length} de ${statuses.length} convocados no llegan al mínimo (${need} de los primeros ${applicable} periodos)</p>
+        <p style="color:#991b1b;font-size:.82rem;">${failing.map(s=>`${s.player.full_name} (${s.count}/${need})`).join(', ')}</p>
+      </div>`;
+    } else if(match.min_rule_type!=='none' && statuses.length>0){
+      html += `<div class="card" style="background:#f0fdf4;border-color:#bbf7d0;margin-bottom:12px;">
+        <p style="color:#166534;font-weight:700;font-size:.88rem;">✅ Todos los convocados cumplen el mínimo exigido</p>
+      </div>`;
+    }
+
+    html += `<div class="card" style="overflow-x:auto;">
       <table style="border-collapse:collapse;width:100%;font-size:.78rem;">
         <thead><tr>
           <th style="text-align:left;padding:4px 8px;position:sticky;left:0;background:#fff;">Jugador</th>
@@ -2544,7 +2566,7 @@ const App = {
           ${match.min_rule_type!=='none' ? `<th style="padding:4px 8px;text-align:center;">Estado</th>` : ''}
         </tr></thead><tbody>`;
 
-    calledUpPlayers.forEach(p=>{
+    calledUpPlayers.forEach((p, idx)=>{
       const rows = participation.filter(r=>r.player_id===p.id);
       html += `<tr style="border-top:1px solid var(--line);">
         <td style="padding:5px 8px;font-weight:600;white-space:nowrap;position:sticky;left:0;background:#fff;">${p.full_name}</td>`;
@@ -2557,11 +2579,9 @@ const App = {
         </td>`;
       }
       if(match.min_rule_type!=='none'){
-        const count = rows.filter(r=> r.period_number<=applicable && r[mode]).length;
-        const need = match.min_rule_periods || 0;
-        const ok = count >= need;
+        const s = statuses[idx];
         html += `<td style="text-align:center;padding:4px 8px;white-space:nowrap;">
-          <span class="pill" style="background:${ok?'#dcfce7':'#fee2e2'};color:${ok?'#166534':'#b91c1c'};">${ok?'✅':'⚠️'} ${count}/${need}</span>
+          <span class="pill" style="background:${s.ok?'#dcfce7':'#fee2e2'};color:${s.ok?'#166534':'#b91c1c'};">${s.ok?'✅':'⚠️'} ${s.count}/${need}</span>
         </td>`;
       }
       html += `</tr>`;
