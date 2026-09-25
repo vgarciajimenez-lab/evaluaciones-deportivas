@@ -198,6 +198,20 @@ const SUPABASE_URL = 'https://hdkhhuygjpsazorvtvnf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_EYmpp8rykCNn74nx8MGi3w_Slk-Z1So';
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Plantillas de normativa de minutos mínimos, sacadas de los reglamentos
+// reales de la Federación de Baloncesto de la Región de Murcia.
+// El mínimo de periodos solo cuenta dentro de los "periodos aplicables"
+// (los últimos periodos del partido quedan libres de esa exigencia).
+const MATCH_RULE_PRESETS = {
+  none: { label:'Sin límite de minutos', periods_count:4, period_minutes:10, min_rule_type:'none', min_rule_periods:null, min_rule_applicable_periods:null, note:'' },
+  benjamin: { label:'Benjamín Mixto (4x4)', periods_count:7, period_minutes:6, min_rule_type:'periods', min_rule_periods:2, min_rule_applicable_periods:6,
+    note:'Además del mínimo de 2 periodos, cada jugador debe jugar al menos 1 periodo completo antes del descanso (antes del 4º periodo).' },
+  minibasket: { label:'Minibasket', periods_count:6, period_minutes:8, min_rule_type:'periods', min_rule_periods:2, min_rule_applicable_periods:5, note:'' },
+  infantil: { label:'Infantil', periods_count:8, period_minutes:5, min_rule_type:'periods', min_rule_periods:2, min_rule_applicable_periods:6, note:'' },
+  custom: { label:'Personalizado', periods_count:4, period_minutes:10, min_rule_type:'periods', min_rule_periods:null, min_rule_applicable_periods:null, note:'' },
+};
+
+
 const App = {
   view: 'login',
   user: null,
@@ -394,6 +408,7 @@ const App = {
   goUsers(){ this.view='users'; this.render(); },
   goClubStats(){ this.view='clubStats'; this.render(); },
   goTeam(team){ this.currentTeam = team; this.view='team'; this.render(); },
+  goMatches(){ this.view='matches'; this.render(); },
   goTeamStats(){ this.view='teamStats'; this.render(); },
   goSubject(subject){ this.currentSubject = subject; this.view='subject'; this.render(); },
   goStats(){ this.view='stats'; this.render(); },
@@ -409,6 +424,8 @@ const App = {
       if(this.view==='users') return this.renderUsers();
       if(this.view==='clubStats') return this.renderClubStats();
       if(this.view==='team') return this.renderTeam();
+      if(this.view==='matches') return this.renderMatches();
+      if(this.view==='matchDetail') return this.renderMatchDetail();
       if(this.view==='teamStats') return this.renderTeamStats();
       if(this.view==='subject') return this.renderSubject();
       if(this.view==='stats') return this.renderStats();
@@ -974,6 +991,7 @@ const App = {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div><h2>${team.name}</h2><p style="color:var(--muted);font-size:.85rem;margin:4px 0 20px;">Temporada ${team.season}</p></div>
         <div class="row">
+          <button class="btn btn-outline" onclick="App.goMatches()">🏀 Partidos</button>
           <button class="btn btn-outline" onclick="App.goTeamStats()">📊 Estadísticas del equipo</button>
           <button class="btn btn-outline" onclick="App.exportTeamCSV()">⬇️ Exportar CSV</button>
           ${canManageRoster ? `<button class="btn btn-outline" onclick="App.editTeam()">✏️ Editar equipo</button>` : ''}
@@ -2239,6 +2257,337 @@ const App = {
     }
 
     document.getElementById('app').innerHTML = html;
+  },
+
+  // ========================================================
+  // CONVOCATORIAS Y ROTACIONES
+  // ========================================================
+
+  async renderMatches(){
+    const team = this.currentTeam;
+    const { data: matches, error } = await client.from('matches')
+      .select('*').eq('team_id', team.id).order('match_date', { ascending:false });
+    if(error) throw error;
+
+    const canManage = this.isAdmin() || (this.isCoach() && this.userTeamId === team.id);
+
+    let html = `<div class="crumb" onclick='App.goTeam(${JSON.stringify(team)})'>← ${team.name}</div>
+      <div class="section-title"><h2>🏀 Partidos</h2>
+        ${canManage ? `<button class="btn btn-primary" onclick="App.openMatchModal(null)">+ Nuevo partido</button>` : ''}
+      </div>`;
+
+    if(!matches || matches.length===0){
+      html += `<div class="empty"><div class="big">🏀</div>Todavía no hay partidos registrados.</div>`;
+    } else {
+      matches.forEach(m=>{
+        const ruleTxt = m.min_rule_type==='periods' ? `Mín. ${m.min_rule_periods} de los primeros ${m.min_rule_applicable_periods} periodos`
+          : m.min_rule_type==='minutes' ? `Mín. ${m.min_rule_minutes} min`
+          : 'Sin límite de minutos';
+        html += `<div class="list-item" onclick="App.openMatchDetail('${m.id}')">
+          <div><div class="name">${m.is_home ? 'vs' : '@'} ${m.opponent}</div>
+            <div class="meta">${m.match_date}${m.competition ? ' · '+m.competition : ''} · ${ruleTxt}</div></div>
+          <div class="arrow">→</div></div>`;
+      });
+    }
+    document.getElementById('app').innerHTML = html;
+  },
+
+  openMatchModal(match){
+    const canManage = this.isAdmin() || (this.isCoach() && this.userTeamId === this.currentTeam.id);
+    if(!canManage){ alert('No tienes permisos para hacer esto.'); return; }
+    const isEdit = !!match;
+
+    // Detecta qué plantilla coincide con los valores del partido (si se edita uno ya existente)
+    let presetKey = 'custom';
+    if(!isEdit) presetKey = 'none';
+    else {
+      presetKey = Object.keys(MATCH_RULE_PRESETS).find(k=>{
+        const p = MATCH_RULE_PRESETS[k];
+        return p.periods_count===match.periods_count && p.min_rule_type===match.min_rule_type
+          && p.min_rule_periods===match.min_rule_periods && p.min_rule_applicable_periods===match.min_rule_applicable_periods;
+      }) || 'custom';
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'matchModalOverlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3>${isEdit ? 'Editar partido' : 'Nuevo partido'}</h3>
+        <label style="margin-top:0;">Rival</label>
+        <input type="text" id="matchOpponent" value="${match ? match.opponent.replace(/"/g,'&quot;') : ''}" placeholder="Nombre del equipo rival">
+        <div class="row">
+          <div style="flex:1;">
+            <label>Fecha</label>
+            <input type="date" id="matchDate" value="${match ? match.match_date : new Date().toISOString().slice(0,10)}">
+          </div>
+          <div style="flex:1;">
+            <label>Local / Visitante</label>
+            <select id="matchIsHome">
+              <option value="true" ${!match || match.is_home ? 'selected' : ''}>Local</option>
+              <option value="false" ${match && !match.is_home ? 'selected' : ''}>Visitante</option>
+            </select>
+          </div>
+        </div>
+        <label>Competición (opcional)</label>
+        <input type="text" id="matchCompetition" value="${match && match.competition ? match.competition.replace(/"/g,'&quot;') : ''}" placeholder="Ej. Liga Infantil FBRM">
+
+        <label>Normativa de minutos mínimos</label>
+        <select id="matchPreset" onchange="App.applyMatchPreset()">
+          ${Object.entries(MATCH_RULE_PRESETS).map(([k,p])=>`<option value="${k}" ${presetKey===k?'selected':''}>${p.label}</option>`).join('')}
+        </select>
+
+        <div class="row">
+          <div style="flex:1;">
+            <label>Nº de periodos</label>
+            <input type="number" min="1" id="matchPeriodsCount" value="${match ? match.periods_count : MATCH_RULE_PRESETS[presetKey].periods_count}">
+          </div>
+          <div style="flex:1;">
+            <label>Minutos por periodo</label>
+            <input type="number" min="1" id="matchPeriodMinutes" value="${match ? match.period_minutes : MATCH_RULE_PRESETS[presetKey].period_minutes}">
+          </div>
+        </div>
+        <div class="row" id="matchRuleFieldsWrap" style="${(match ? match.min_rule_type : MATCH_RULE_PRESETS[presetKey].min_rule_type)==='none' ? 'display:none;' : ''}">
+          <div style="flex:1;">
+            <label>Mínimo de periodos a jugar</label>
+            <input type="number" min="0" id="matchMinPeriods" value="${match && match.min_rule_periods!=null ? match.min_rule_periods : (MATCH_RULE_PRESETS[presetKey].min_rule_periods ?? '')}">
+          </div>
+          <div style="flex:1;">
+            <label>De los primeros N periodos</label>
+            <input type="number" min="0" id="matchApplicablePeriods" value="${match && match.min_rule_applicable_periods!=null ? match.min_rule_applicable_periods : (MATCH_RULE_PRESETS[presetKey].min_rule_applicable_periods ?? '')}">
+          </div>
+        </div>
+        <p id="matchPresetNote" style="font-size:.78rem;color:var(--muted);margin-top:8px;">${match ? '' : (MATCH_RULE_PRESETS[presetKey].note||'')}</p>
+
+        <label>Notas (opcional)</label>
+        <textarea id="matchNotes" rows="2" placeholder="Cualquier matiz de la normativa, avisos, etc.">${match && match.notes ? match.notes : ''}</textarea>
+
+        <div class="row" style="margin-top:20px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="App.closeMatchModal()">Cancelar</button>
+          <button class="btn btn-primary" id="matchModalSaveBtn" style="flex:1;" onclick="App.saveMatchModal(${isEdit ? `'${match.id}'` : 'null'})">Guardar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  },
+
+  closeMatchModal(){
+    const el = document.getElementById('matchModalOverlay');
+    if(el) el.remove();
+  },
+
+  applyMatchPreset(){
+    const key = document.getElementById('matchPreset').value;
+    const p = MATCH_RULE_PRESETS[key];
+    document.getElementById('matchPeriodsCount').value = p.periods_count;
+    document.getElementById('matchPeriodMinutes').value = p.period_minutes;
+    document.getElementById('matchMinPeriods').value = p.min_rule_periods ?? '';
+    document.getElementById('matchApplicablePeriods').value = p.min_rule_applicable_periods ?? '';
+    document.getElementById('matchRuleFieldsWrap').style.display = p.min_rule_type==='none' ? 'none' : 'flex';
+    document.getElementById('matchPresetNote').textContent = p.note || '';
+  },
+
+  async saveMatchModal(matchId){
+    const opponent = document.getElementById('matchOpponent').value.trim();
+    if(!opponent){ alert('Escribe el nombre del rival.'); return; }
+    const match_date = document.getElementById('matchDate').value;
+    const is_home = document.getElementById('matchIsHome').value === 'true';
+    const competition = document.getElementById('matchCompetition').value.trim() || null;
+    const presetKey = document.getElementById('matchPreset').value;
+    const min_rule_type = MATCH_RULE_PRESETS[presetKey].min_rule_type;
+    const periods_count = parseInt(document.getElementById('matchPeriodsCount').value, 10) || 4;
+    const period_minutes = parseInt(document.getElementById('matchPeriodMinutes').value, 10) || 10;
+    const minPeriodsStr = document.getElementById('matchMinPeriods').value;
+    const applicableStr = document.getElementById('matchApplicablePeriods').value;
+    const min_rule_periods = min_rule_type==='periods' && minPeriodsStr!=='' ? parseInt(minPeriodsStr,10) : null;
+    const min_rule_applicable_periods = min_rule_type==='periods' && applicableStr!=='' ? parseInt(applicableStr,10) : null;
+    const notes = document.getElementById('matchNotes').value.trim() || null;
+
+    const payload = {
+      team_id: this.currentTeam.id, opponent, match_date, is_home, competition,
+      periods_count, period_minutes, min_rule_type, min_rule_periods, min_rule_applicable_periods,
+      min_rule_minutes: null, notes
+    };
+
+    const btn = document.getElementById('matchModalSaveBtn');
+    btn.disabled = true; btn.textContent = 'Guardando...';
+    let error;
+    if(matchId){
+      ({ error } = await client.from('matches').update(payload).eq('id', matchId));
+    } else {
+      payload.created_by = this.user.id;
+      ({ error } = await client.from('matches').insert(payload));
+    }
+    btn.disabled = false; btn.textContent = 'Guardar';
+    if(error) return alert('Error: '+error.message);
+    this.closeMatchModal();
+    this.renderMatches();
+  },
+
+  async deleteMatch(matchId){
+    const canManage = this.isAdmin() || (this.isCoach() && this.userTeamId === this.currentTeam.id);
+    if(!canManage){ alert('No tienes permisos para hacer esto.'); return; }
+    if(!confirm('¿Eliminar este partido? Se borrará también su convocatoria y rotaciones. No se puede deshacer.')) return;
+    const { error } = await client.from('matches').delete().eq('id', matchId);
+    if(error) return alert('Error: '+error.message);
+    this.renderMatches();
+  },
+
+  openMatchDetail(matchId){
+    this.currentMatchId = matchId;
+    this.view = 'matchDetail';
+    this.render();
+  },
+
+  async renderMatchDetail(){
+    const { data: match, error: e1 } = await client.from('matches').select('*').eq('id', this.currentMatchId).single();
+    if(e1) throw e1;
+    const { data: allPlayers, error: e2 } = await client.from('players')
+      .select('*').eq('team_id', match.team_id).eq('active', true).order('number', { ascending:true, nullsFirst:false });
+    if(e2) throw e2;
+    const { data: callups, error: e3 } = await client.from('match_callups').select('*').eq('match_id', match.id);
+    if(e3) throw e3;
+    const { data: participation, error: e4 } = await client.from('match_period_participation').select('*').eq('match_id', match.id);
+    if(e4) throw e4;
+
+    this._matchCache = { match, allPlayers, callups, participation };
+
+    const canManage = this.isAdmin() || (this.isCoach() && this.userTeamId === match.team_id);
+    const calledUpIds = new Set(callups.map(c=>c.player_id));
+    const calledUpPlayers = allPlayers.filter(p=>calledUpIds.has(p.id));
+
+    let html = `<div class="crumb" onclick="App.goMatches()">← Partidos</div>
+      <div class="section-title">
+        <div><h2>${match.is_home ? 'vs' : '@'} ${match.opponent}</h2>
+          <p style="color:var(--muted);font-size:.85rem;margin:4px 0 0;">${match.match_date}${match.competition ? ' · '+match.competition : ''}</p></div>
+        <div class="row">
+          ${canManage ? `<button class="btn btn-outline" onclick='App.openMatchModal(${JSON.stringify(match)})'>✏️ Editar</button>` : ''}
+          ${canManage ? `<button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="App.deleteMatch('${match.id}')">🗑️ Eliminar</button>` : ''}
+        </div>
+      </div>`;
+
+    if(match.min_rule_type !== 'none'){
+      html += `<div class="card" style="font-size:.85rem;">
+        <strong>Normativa:</strong> mínimo ${match.min_rule_periods} de los primeros ${match.min_rule_applicable_periods} periodos (de ${match.periods_count} en total, ${match.period_minutes} min/periodo).
+        ${match.notes ? `<p style="color:var(--muted);margin-top:6px;">${match.notes}</p>` : ''}
+      </div>`;
+    }
+
+    // ---- Convocatoria ----
+    html += `<div class="section-title"><h2 style="font-size:1rem;">Convocatoria (${calledUpPlayers.length})</h2></div>`;
+    if(canManage){
+      html += `<div class="card">
+        <label style="margin-top:0;">Añadir jugador a la convocatoria</label>
+        <select id="addCallupSelect">
+          <option value="">Elige un jugador...</option>
+          ${allPlayers.filter(p=>!calledUpIds.has(p.id)).map(p=>`<option value="${p.id}">${p.number!=null?`#${p.number} `:''}${p.full_name}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-block" style="margin-top:8px;" onclick="App.addCallup()">+ Añadir a la convocatoria</button>
+      </div>`;
+    }
+    if(calledUpPlayers.length===0){
+      html += `<div class="empty" style="padding:20px;">Todavía no hay jugadores convocados.</div>`;
+    } else {
+      calledUpPlayers.forEach(p=>{
+        const cu = callups.find(c=>c.player_id===p.id);
+        html += `<div class="list-item" style="cursor:default;">
+          <div style="display:flex;align-items:center;gap:10px;flex:1;">
+            <span style="font-weight:600;">${p.full_name}</span>
+            <input type="number" value="${cu.squad_number!=null?cu.squad_number:''}" placeholder="Dorsal" style="width:70px;padding:6px;font-size:.82rem;" ${canManage?'':'disabled'}
+              onchange="App.updateSquadNumber('${p.id}', this.value)">
+          </div>
+          ${canManage ? `<button class="btn-outline" style="border:none;background:none;cursor:pointer;padding:6px;" title="Quitar de la convocatoria" onclick="App.removeCallup('${p.id}')">✕</button>` : ''}
+        </div>`;
+      });
+    }
+
+    // ---- Rotaciones (planificación + en vivo) ----
+    if(calledUpPlayers.length>0){
+      html += this.renderRotationGrid('planned', 'Planificación de rotaciones', 'Marca antes del partido qué periodos tiene pensado jugar cada jugador.', canManage);
+      html += this.renderRotationGrid('actual', 'En vivo', 'Ve marcando en directo qué periodos ha jugado realmente cada jugador.', canManage);
+    }
+
+    document.getElementById('app').innerHTML = html;
+  },
+
+  renderRotationGrid(mode, title, subtitle, canManage){
+    const { match, allPlayers, callups, participation } = this._matchCache;
+    const calledUpIds = new Set(callups.map(c=>c.player_id));
+    const calledUpPlayers = allPlayers.filter(p=>calledUpIds.has(p.id));
+    const applicable = match.min_rule_applicable_periods || match.periods_count;
+
+    let html = `<div class="section-title"><h2 style="font-size:1rem;">${title}</h2></div>
+      <p style="color:var(--muted);font-size:.8rem;margin:-4px 0 10px;">${subtitle}</p>
+      <div class="card" style="overflow-x:auto;">
+      <table style="border-collapse:collapse;width:100%;font-size:.78rem;">
+        <thead><tr>
+          <th style="text-align:left;padding:4px 8px;position:sticky;left:0;background:#fff;">Jugador</th>
+          ${Array.from({length:match.periods_count}, (_,i)=>`<th style="padding:4px 6px;text-align:center;${i+1>applicable?'color:var(--muted);':''}">P${i+1}</th>`).join('')}
+          ${match.min_rule_type!=='none' ? `<th style="padding:4px 8px;text-align:center;">Estado</th>` : ''}
+        </tr></thead><tbody>`;
+
+    calledUpPlayers.forEach(p=>{
+      const rows = participation.filter(r=>r.player_id===p.id);
+      html += `<tr style="border-top:1px solid var(--line);">
+        <td style="padding:5px 8px;font-weight:600;white-space:nowrap;position:sticky;left:0;background:#fff;">${p.full_name}</td>`;
+      for(let period=1; period<=match.periods_count; period++){
+        const row = rows.find(r=>r.period_number===period);
+        const on = row ? !!row[mode] : false;
+        html += `<td style="text-align:center;padding:4px;">
+          <button ${canManage?'':'disabled'} onclick="App.togglePeriodParticipation('${p.id}', ${period}, '${mode}')"
+            style="width:22px;height:22px;border-radius:5px;border:2px solid ${on?'var(--teal)':'var(--line)'};background:${on?'var(--teal)':'#fff'};cursor:${canManage?'pointer':'default'};"></button>
+        </td>`;
+      }
+      if(match.min_rule_type!=='none'){
+        const count = rows.filter(r=> r.period_number<=applicable && r[mode]).length;
+        const need = match.min_rule_periods || 0;
+        const ok = count >= need;
+        html += `<td style="text-align:center;padding:4px 8px;white-space:nowrap;">
+          <span class="pill" style="background:${ok?'#dcfce7':'#fee2e2'};color:${ok?'#166534':'#b91c1c'};">${ok?'✅':'⚠️'} ${count}/${need}</span>
+        </td>`;
+      }
+      html += `</tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    return html;
+  },
+
+  async addCallup(){
+    const sel = document.getElementById('addCallupSelect');
+    const playerId = sel.value;
+    if(!playerId) return;
+    const { error } = await client.from('match_callups').insert({ match_id: this.currentMatchId, player_id: playerId });
+    if(error) return alert('Error: '+error.message);
+    this.renderMatchDetail();
+  },
+
+  async removeCallup(playerId){
+    if(!confirm('¿Quitar a este jugador de la convocatoria? También se borrará su rotación planificada para este partido.')) return;
+    const { error: e1 } = await client.from('match_callups').delete().eq('match_id', this.currentMatchId).eq('player_id', playerId);
+    if(e1) return alert('Error: '+e1.message);
+    await client.from('match_period_participation').delete().eq('match_id', this.currentMatchId).eq('player_id', playerId);
+    this.renderMatchDetail();
+  },
+
+  async updateSquadNumber(playerId, value){
+    const squad_number = value!=='' ? parseInt(value,10) : null;
+    const { error } = await client.from('match_callups').update({ squad_number }).eq('match_id', this.currentMatchId).eq('player_id', playerId);
+    if(error) alert('Error: '+error.message);
+  },
+
+  async togglePeriodParticipation(playerId, periodNumber, mode){
+    const { participation } = this._matchCache;
+    const existing = participation.find(r=>r.player_id===playerId && r.period_number===periodNumber);
+    const newValue = existing ? !existing[mode] : true;
+
+    const { error } = await client.from('match_period_participation')
+      .upsert({
+        match_id: this.currentMatchId, player_id: playerId, period_number: periodNumber,
+        planned: mode==='planned' ? newValue : (existing ? existing.planned : false),
+        actual: mode==='actual' ? newValue : (existing ? existing.actual : false),
+      }, { onConflict: 'match_id,player_id,period_number' });
+    if(error){ alert('Error: '+error.message); return; }
+    this.renderMatchDetail();
   }
 };
 
