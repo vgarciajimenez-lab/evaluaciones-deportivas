@@ -704,9 +704,12 @@ const App = {
     overlay.innerHTML = `
       <div class="modal-box" style="max-width:720px;">
         <h3 style="margin-bottom:4px;">${exercise.name}</h3>
-        <div class="row" style="margin-bottom:14px;">
+        <div class="row" style="margin-bottom:14px;flex-wrap:wrap;">
           ${exercise.category ? `<span class="pill">${exercise.category}</span>` : ''}
           ${exercise.duration_minutes ? `<span class="pill">${exercise.duration_minutes} min</span>` : ''}
+          ${exercise.recommended_categories && exercise.recommended_categories.length
+            ? exercise.recommended_categories.map(c=>`<span class="pill" style="background:#e0f2fe;color:#075985;">🎯 ${c}</span>`).join('')
+            : ''}
         </div>
         ${galleryHtml}
         ${exercise.description ? `<p style="font-size:.9rem;line-height:1.5;white-space:pre-wrap;">${exercise.description}</p>` : `<p style="color:var(--muted);font-size:.85rem;">Sin descripción.</p>`}
