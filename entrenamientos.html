@@ -446,6 +446,9 @@ const App = {
         <div class="body">
           <div class="name">${ex.name}</div>
           <div class="meta">${ex.category||'Sin categoría'}${ex.duration_minutes?` · ${ex.duration_minutes} min`:''}</div>
+          ${ex.recommended_categories && ex.recommended_categories.length
+            ? `<div class="meta" style="color:#075985;margin-top:2px;">🎯 ${ex.recommended_categories.join(', ')}</div>`
+            : ''}
         </div>
       </div>`;
     });
@@ -963,16 +966,67 @@ const App = {
         } else {
           thumbInner = `<span style="font-size:1.4rem;">🏀</span>`;
         }
-        return `<div onclick='App.addExerciseToBuilderFromGrid(${JSON.stringify(ex)})' title="Añadir a la sesión"
+        return `<div onclick='App.addExerciseToBuilderFromGrid(${JSON.stringify(ex)})'
+          onmouseenter='App.showExerciseTooltip(event, ${JSON.stringify(ex)})' onmousemove="App.moveExerciseTooltip(event)" onmouseleave="App.hideExerciseTooltip()"
+          title="Añadir a la sesión"
           style="cursor:pointer;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff;transition:.12s;"
           onmouseover="this.style.borderColor='var(--teal)'" onmouseout="this.style.borderColor='var(--line)'">
           <div style="width:100%;height:72px;background:#eef2f1;display:flex;align-items:center;justify-content:center;overflow:hidden;">${thumbInner}</div>
           <div style="padding:5px 6px;">
             <div style="font-size:.7rem;font-weight:700;line-height:1.25;">${ex.name}</div>
             <div style="font-size:.62rem;color:var(--muted);margin-top:1px;">${ex.category||'Sin categoría'}${ex.duration_minutes?` · ${ex.duration_minutes}min`:''}</div>
+            ${ex.recommended_categories && ex.recommended_categories.length
+              ? `<div style="font-size:.6rem;color:#075985;margin-top:1px;">🎯 ${ex.recommended_categories.join(', ')}</div>`
+              : ''}
           </div>
         </div>`;
       }).join('') + `</div>`;
+  },
+
+  showExerciseTooltip(ev, ex){
+    let tip = document.getElementById('exerciseHoverTooltip');
+    if(!tip){
+      tip = document.createElement('div');
+      tip.id = 'exerciseHoverTooltip';
+      tip.style.cssText = 'position:fixed;z-index:2000;width:260px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:10px;pointer-events:none;font-size:.78rem;';
+      document.body.appendChild(tip);
+    }
+    let thumbInner;
+    if(ex.diagram_urls && ex.diagram_urls.length){
+      thumbInner = `<img src="${ex.diagram_urls[0]}" style="width:100%;max-height:150px;object-fit:contain;">`;
+    } else if(ex.hoopboard_frames && ex.hoopboard_frames.length){
+      thumbInner = this.renderCourtFrameSVG(ex.hoopboard_frames[0]) || '';
+    } else {
+      thumbInner = '';
+    }
+    tip.innerHTML = `
+      ${thumbInner ? `<div style="background:#eef2f1;border-radius:6px;overflow:hidden;margin-bottom:8px;display:flex;align-items:center;justify-content:center;">${thumbInner}</div>` : ''}
+      <div style="font-weight:700;font-size:.85rem;margin-bottom:3px;">${ex.name}</div>
+      ${ex.recommended_categories && ex.recommended_categories.length
+        ? `<div style="color:#075985;font-weight:600;margin-bottom:5px;">🎯 Recomendado: ${ex.recommended_categories.join(', ')}</div>`
+        : ''}
+      ${ex.description ? `<div style="color:var(--muted);line-height:1.4;white-space:pre-wrap;">${ex.description}</div>` : ''}
+    `;
+    tip.style.display = 'block';
+    this.moveExerciseTooltip(ev);
+  },
+
+  moveExerciseTooltip(ev){
+    const tip = document.getElementById('exerciseHoverTooltip');
+    if(!tip || tip.style.display==='none') return;
+    const margin = 16;
+    let left = ev.clientX + margin;
+    let top = ev.clientY + margin;
+    const tipRect = tip.getBoundingClientRect();
+    if(left + tipRect.width > window.innerWidth - 8) left = ev.clientX - tipRect.width - margin;
+    if(top + tipRect.height > window.innerHeight - 8) top = window.innerHeight - tipRect.height - 8;
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+  },
+
+  hideExerciseTooltip(){
+    const tip = document.getElementById('exerciseHoverTooltip');
+    if(tip) tip.style.display = 'none';
   },
 
   renderBuilderList(){
